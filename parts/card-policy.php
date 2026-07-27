@@ -10,6 +10,7 @@ $show_tags    = $args['showTags'] ?? true;
 $topics       = get_the_terms( get_the_ID(), 'policy_topic' );
 $custom_link  = get_post_meta( get_the_ID(), '_policy_custom_link', true );
 $card_link    = ! empty( $custom_link ) ? $custom_link : get_permalink();
+$is_external  = ! empty( $custom_link ) && preg_match( '#^(https?:)?//#i', $custom_link );
 $link_text    = get_post_meta( get_the_ID(), '_policy_link_text', true );
 $link_text    = ! empty( $link_text ) ? $link_text : __( 'View Resource', 'takt' );
 ?>
@@ -17,7 +18,7 @@ $link_text    = ! empty( $link_text ) ? $link_text : __( 'View Resource', 'takt'
 	<a
 		href="<?php echo esc_url( $card_link ); ?>"
 		class="block group no-underline! h-full"
-		<?php if ( ! empty( $custom_link ) ) : ?>target="_blank" rel="noopener noreferrer"<?php endif; ?>
+		<?php if ( $is_external ) : ?>target="_blank" rel="noopener noreferrer"<?php endif; ?>
 	>
 		<div class="flex flex-col gap-6 h-full rounded-3xl border dark:border-off-white border-charcoal/10 dark:bg-charcoal bg-off-white p-6 group-hover:bg-accent group-hover:border-accent group-hover:text-charcoal transition-colors">
 			<?php if ( $show_tags && ! empty( $topics ) && ! is_wp_error( $topics ) ) : ?>
