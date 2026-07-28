@@ -436,12 +436,12 @@ if ( defined( 'WP_CLI' ) && WP_CLI ) {
 		 */
 		public function clean_descriptions( $args, $assoc_args ) {
 			// Matches " --- Event Details: https://..." at the end of the
-			// string, tolerant of em-dash, en-dash, or double-hyphen (CampusGroups
-			// isn't consistent about which one it emits), and any amount of
-			// surrounding whitespace. The "Event Details: URL" part is
+			// string, tolerant of em-dash, en-dash, or a run of hyphens (CampusGroups'
+			// real separator is three, "---", confirmed from raw import data), and any
+			// amount of surrounding whitespace. The "Event Details: URL" part is
 			// optional — CampusGroups sometimes sends just the bare
 			// separator with no URL after it.
-			$pattern = '/\s*(?:\x{2013}|\x{2014}|-{1,2})\s*(?:Event Details:\s*https?:\/\/\S+)?\s*$/u';
+			$pattern = '/\s*(?:\x{2013}|\x{2014}|-+)\s*(?:Event Details:\s*https?:\/\/\S+)?\s*$/u';
 
 			global $wpdb;
 			$rows = $wpdb->get_results(
@@ -733,24 +733,42 @@ function myignite_strip_venue_organizer_for_ics( $event, $item ) {
 }
 
 // -----------------------------------------------------------------------
-// TEMPORARY DEBUG — remove once description-newline and club_acronym
-// category timing are diagnosed. Writes to wp-content/debug.log only,
-// doesn't change any saved data or site behavior.
+// TEMPORARY DEBUG (round 2) — description/newline question is answered
+// (CampusGroups-side, not fixable here). Now isolating exactly which
+// Event Aggregator hook actually controls category term creation, since
+// tribe_aggregator_save_event_args never fired on the last test import —
+// meaning our category fix, hooked to that same filter, never ran either.
+// Writes to wp-content/debug.log only, doesn't change any saved data.
 // -----------------------------------------------------------------------
-add_filter( 'tribe_aggregator_translate_service_data', function ( $event, $item ) {
-	error_log( 'MYIGNITE DEBUG — raw $item->description: ' . var_export( $item->description ?? null, true ) );
-	error_log( 'MYIGNITE DEBUG — raw $item->categories: ' . var_export( $item->categories ?? null, true ) );
-	error_log( 'MYIGNITE DEBUG — translated $event[categories]: ' . var_export( $event['categories'] ?? 'NOT SET', true ) );
-	error_log( 'MYIGNITE DEBUG — does IGNITECLUBS term already exist in tribe_events_cat? ' . var_export( term_exists( 'IGNITECLUBS', 'tribe_events_cat' ), true ) );
-	return $event;
-}, 1, 2 );
-
 add_filter( 'tribe_aggregator_save_event_args', function ( $args ) {
-	error_log( 'MYIGNITE DEBUG — save_event_args[categories]: ' . var_export( $args['categories'] ?? 'NOT SET', true ) );
+	error_log( 'MYIGNITE DEBUG2 — save_event_args[categories]: ' . var_export( $args['categories'] ?? 'NOT SET', true ) );
 	return $args;
 }, 1 );
+
+add_filter( 'tribe_aggregator_before_save_event', function ( $event ) {
+	error_log( 'MYIGNITE DEBUG2 — before_save_event[categories]: ' . var_export( $event['categories'] ?? 'NOT SET', true ) );
+	return $event;
+}, 1 );
+
+add_filter( 'tribe_aggregator_before_insert_event', function ( $event ) {
+	error_log( 'MYIGNITE DEBUG2 — before_insert_event[categories]: ' . var_export( $event['categories'] ?? 'NOT SET', true ) );
+	return $event;
+}, 1 );
+
+add_filter( 'tribe_aggregator_before_update_event', function ( $event ) {
+	error_log( 'MYIGNITE DEBUG2 — before_update_event[categories]: ' . var_export( $event['categories'] ?? 'NOT SET', true ) );
+	return $event;
+}, 1 );
+
+add_action( 'tribe_aggregator_after_insert_post', function ( $event, $item, $record ) {
+	if ( empty( $event['ID'] ) ) {
+		return;
+	}
+	$terms = wp_get_post_terms( $event['ID'], 'tribe_events_cat', array( 'fields' => 'names' ) );
+	error_log( "MYIGNITE DEBUG2 — after_insert_post {$event['ID']} final tribe_events_cat terms: " . var_export( $terms, true ) );
+}, 1, 3 );
 // -----------------------------------------------------------------------
-// END TEMPORARY DEBUG
+// END TEMPORARY DEBUG (round 2)
 // -----------------------------------------------------------------------
 
 /**
