@@ -864,37 +864,65 @@ function myignite_strip_venue_organizer_for_ics( $event, $item ) {
 	return $event;
 }
 
-// -----------------------------------------------------------------------
-// TEMPORARY DEBUG (round 4) — MyIGNITE turns out to have two separate
-// description-type fields (a short "description" and a "detailed
-// description"). Round 3 only inspected $item->description, which would
-// miss the short field entirely if it's carried under a different
-// property rather than concatenated into the same one. Dumping every
-// property on the raw item so nothing gets missed, plus the same
-// whitespace-marking as before for whichever property holds the long text.
-// Writes to wp-content/debug.log only, doesn't change any saved data.
-// -----------------------------------------------------------------------
-add_filter( 'tribe_aggregator_translate_service_data', function ( $event, $item ) {
-	$mark_whitespace = function ( $text ) {
-		$visual = str_replace( array( "\r\n", "\r", "\n" ), array( '[CRLF]', '[CR]', '[LF]' ), (string) $text );
-		return preg_replace_callback( '/ {2,}/', function ( $m ) {
-			return '[' . strlen( $m[0] ) . 'xSPACE]';
-		}, $visual );
-	};
+/**
+ * Recovers paragraph breaks lost from $item->description.
+ *
+ * Confirmed via debug logging against real test imports: Event Aggregator's
+ * "safe" $item->description has already collapsed every line break down to
+ * a single space (indistinguishable from normal word spacing) by the time
+ * any of our filters see it — regardless of whether the break was typed
+ * with Enter or Shift+Enter, and regardless of which MyIGNITE description
+ * field was used. $item->unsafe_description, however, still carries the
+ * break — as a literal two-character "\n" escape sequence (backslash + n
+ * as text), not an actual newline control character. Un-escaping that
+ * back into a real newline recovers the paragraph structure entirely.
+ *
+ * Best-guess key: $event['description'] mirrors $item->description the
+ * same way $event['categories'] mirrors $item->categories elsewhere in
+ * this file — kept alongside a debug line for one more test round to
+ * confirm this is really the key that ends up in post_content.
+ */
+add_filter( 'tribe_aggregator_translate_service_data', 'myignite_recover_description_linebreaks', 10, 2 );
+function myignite_recover_description_linebreaks( $event, $item ) {
+	global $myignite_ea_is_ics_import;
 
-	error_log( 'MYIGNITE DEBUG4 — title: ' . var_export( $item->title ?? 'unknown', true ) );
-	error_log( 'MYIGNITE DEBUG4 — ALL raw $item properties: ' . var_export( get_object_vars( $item ), true ) );
+	if ( empty( $myignite_ea_is_ics_import ) || empty( $item->unsafe_description ) ) {
+		return $event;
+	}
 
-	foreach ( get_object_vars( $item ) as $key => $value ) {
-		if ( is_string( $value ) && strlen( $value ) > 0 ) {
-			error_log( "MYIGNITE DEBUG4 — \$item->{$key} (whitespace marked): " . $mark_whitespace( $value ) );
-		}
+	// Literal "\r\n" / "\n" text (backslash followed by the letter, not a
+	// real control character) — un-escape into actual line breaks.
+	$recovered = str_replace( array( '\\r\\n', '\\n' ), array( "\n", "\n" ), $item->unsafe_description );
+
+	$event['description'] = $recovered;
+
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		error_log( 'MYIGNITE DEBUG5 — recovered $event[description]: ' . var_export( $recovered, true ) );
 	}
 
 	return $event;
-}, 5, 2 );
+}
+
 // -----------------------------------------------------------------------
-// END TEMPORARY DEBUG (round 4)
+// TEMPORARY DEBUG (round 5) — round 4 confirmed the fix: $item->description
+// has already lost every line break by the time we see it, but
+// $item->unsafe_description still carries the break as literal "\n" text.
+// myignite_recover_description_linebreaks() above un-escapes that back
+// into a real newline and writes it to $event['description'] — the same
+// key pattern $event['categories'] uses elsewhere in this file. This round
+// confirms end-to-end that the recovered text actually lands in the saved
+// post_content, not just in $event at translate-time.
+// Writes to wp-content/debug.log only, doesn't change any saved data.
+// -----------------------------------------------------------------------
+add_action( 'tribe_aggregator_after_insert_post', function ( $event, $item, $record ) {
+	if ( empty( $event['ID'] ) ) {
+		return;
+	}
+	$post = get_post( $event['ID'] );
+	error_log( "MYIGNITE DEBUG5 — post {$event['ID']} final post_content: " . var_export( $post->post_content ?? 'NOT FOUND', true ) );
+}, 20, 3 );
+// -----------------------------------------------------------------------
+// END TEMPORARY DEBUG (round 5)
 // -----------------------------------------------------------------------
 
 
