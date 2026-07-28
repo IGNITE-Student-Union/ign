@@ -44,6 +44,20 @@ function takt_register_blocks() {
 
 				if ( empty( $anchor ) ) {
 					$anchor = 'auto-' . preg_replace( '/[^A-Za-z0-9]/', '', strtolower( md5( json_encode( $block ) ) ) );
+
+					// Two block instances with identical attributes (e.g. an empty Button
+					// Row) hash to the same anchor. Disambiguate so ids stay unique on the
+					// page, which aria-labelledby/aria-controls references depend on.
+					global $takt_used_block_anchors;
+					$takt_used_block_anchors = $takt_used_block_anchors ?? [];
+
+					$base_anchor = $anchor;
+					$suffix      = 2;
+					while ( isset( $takt_used_block_anchors[ $anchor ] ) ) {
+						$anchor = $base_anchor . '-' . $suffix;
+						++$suffix;
+					}
+					$takt_used_block_anchors[ $anchor ] = true;
 				}
 
 				global $takt_current_block_folder;
