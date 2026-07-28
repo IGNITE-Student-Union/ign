@@ -865,24 +865,36 @@ function myignite_strip_venue_organizer_for_ics( $event, $item ) {
 }
 
 // -----------------------------------------------------------------------
-// TEMPORARY DEBUG (round 3) — testing whether Enter vs Shift+Enter in the
-// MyIGNITE description editor makes a difference in whether a paragraph
-// break survives as a real line break vs. collapsing into extra spaces.
-// Marks whitespace unambiguously so it's readable at a glance. Writes to
-// wp-content/debug.log only, doesn't change any saved data.
+// TEMPORARY DEBUG (round 4) — MyIGNITE turns out to have two separate
+// description-type fields (a short "description" and a "detailed
+// description"). Round 3 only inspected $item->description, which would
+// miss the short field entirely if it's carried under a different
+// property rather than concatenated into the same one. Dumping every
+// property on the raw item so nothing gets missed, plus the same
+// whitespace-marking as before for whichever property holds the long text.
+// Writes to wp-content/debug.log only, doesn't change any saved data.
 // -----------------------------------------------------------------------
 add_filter( 'tribe_aggregator_translate_service_data', function ( $event, $item ) {
-	$desc   = $item->description ?? '';
-	$visual = str_replace( array( "\r\n", "\r", "\n" ), array( '[CRLF]', '[CR]', '[LF]' ), $desc );
-	$visual = preg_replace_callback( '/ {2,}/', function ( $m ) {
-		return '[' . strlen( $m[0] ) . 'xSPACE]';
-	}, $visual );
-	error_log( 'MYIGNITE DEBUG3 — title: ' . var_export( $item->title ?? 'unknown', true ) );
-	error_log( 'MYIGNITE DEBUG3 — description (whitespace marked): ' . $visual );
+	$mark_whitespace = function ( $text ) {
+		$visual = str_replace( array( "\r\n", "\r", "\n" ), array( '[CRLF]', '[CR]', '[LF]' ), (string) $text );
+		return preg_replace_callback( '/ {2,}/', function ( $m ) {
+			return '[' . strlen( $m[0] ) . 'xSPACE]';
+		}, $visual );
+	};
+
+	error_log( 'MYIGNITE DEBUG4 — title: ' . var_export( $item->title ?? 'unknown', true ) );
+	error_log( 'MYIGNITE DEBUG4 — ALL raw $item properties: ' . var_export( get_object_vars( $item ), true ) );
+
+	foreach ( get_object_vars( $item ) as $key => $value ) {
+		if ( is_string( $value ) && strlen( $value ) > 0 ) {
+			error_log( "MYIGNITE DEBUG4 — \$item->{$key} (whitespace marked): " . $mark_whitespace( $value ) );
+		}
+	}
+
 	return $event;
 }, 5, 2 );
 // -----------------------------------------------------------------------
-// END TEMPORARY DEBUG (round 3)
+// END TEMPORARY DEBUG (round 4)
 // -----------------------------------------------------------------------
 
 
