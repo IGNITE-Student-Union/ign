@@ -864,6 +864,27 @@ function myignite_strip_venue_organizer_for_ics( $event, $item ) {
 	return $event;
 }
 
+// -----------------------------------------------------------------------
+// TEMPORARY DEBUG (round 3) — testing whether Enter vs Shift+Enter in the
+// MyIGNITE description editor makes a difference in whether a paragraph
+// break survives as a real line break vs. collapsing into extra spaces.
+// Marks whitespace unambiguously so it's readable at a glance. Writes to
+// wp-content/debug.log only, doesn't change any saved data.
+// -----------------------------------------------------------------------
+add_filter( 'tribe_aggregator_translate_service_data', function ( $event, $item ) {
+	$desc   = $item->description ?? '';
+	$visual = str_replace( array( "\r\n", "\r", "\n" ), array( '[CRLF]', '[CR]', '[LF]' ), $desc );
+	$visual = preg_replace_callback( '/ {2,}/', function ( $m ) {
+		return '[' . strlen( $m[0] ) . 'xSPACE]';
+	}, $visual );
+	error_log( 'MYIGNITE DEBUG3 — title: ' . var_export( $item->title ?? 'unknown', true ) );
+	error_log( 'MYIGNITE DEBUG3 — description (whitespace marked): ' . $visual );
+	return $event;
+}, 5, 2 );
+// -----------------------------------------------------------------------
+// END TEMPORARY DEBUG (round 3)
+// -----------------------------------------------------------------------
+
 
 /**
  * Persists the venue/organizer name(s) as plain-text post meta on the
