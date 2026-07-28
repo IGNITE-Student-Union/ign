@@ -741,25 +741,43 @@ function myignite_correct_club_acronym_name( $name ) {
 	return $name;
 }
 
-add_filter( 'tribe_aggregator_save_event_args', 'myignite_fix_club_acronym_categories' );
-function myignite_fix_club_acronym_categories( $args ) {
+/**
+ * Originally hooked to `tribe_aggregator_save_event_args`, on the (wrong)
+ * assumption that it mirrored the documented `categories`/`tags` schema
+ * for other Aggregator filters. Confirmed via debug logging against a real
+ * import that this filter never fires at all in the installed TEC version
+ * — so this fix silently never ran, and every sync kept creating fresh
+ * IGNITECLUBS/IGNITEEVENTS terms alongside whatever the retroactive
+ * cleanup had already renamed.
+ *
+ * The filters that actually fire, confirmed the same way, with
+ * $event['categories'] present as the raw string/array at that point:
+ * `tribe_aggregator_before_save_event`, `before_insert_event` (new events),
+ * and `before_update_event` (recurring events being re-synced — this is
+ * the one that actually fired in testing, since the test event's UID
+ * already existed from a prior sync).
+ */
+add_filter( 'tribe_aggregator_before_save_event', 'myignite_fix_club_acronym_categories' );
+add_filter( 'tribe_aggregator_before_insert_event', 'myignite_fix_club_acronym_categories' );
+add_filter( 'tribe_aggregator_before_update_event', 'myignite_fix_club_acronym_categories' );
+function myignite_fix_club_acronym_categories( $event ) {
 
-	if ( empty( $args['categories'] ) ) {
-		return $args;
+	if ( empty( $event['categories'] ) ) {
+		return $event;
 	}
 
 	// Categories arrive as either a comma-separated string or an array
 	// depending on Event Aggregator version — handle both.
-	$was_string = ! is_array( $args['categories'] );
+	$was_string = ! is_array( $event['categories'] );
 	$categories = $was_string
-		? array_map( 'trim', explode( ',', $args['categories'] ) )
-		: $args['categories'];
+		? array_map( 'trim', explode( ',', $event['categories'] ) )
+		: $event['categories'];
 
 	$categories = array_map( 'myignite_correct_club_acronym_name', $categories );
 
-	$args['categories'] = $was_string ? implode( ', ', $categories ) : $categories;
+	$event['categories'] = $was_string ? implode( ', ', $categories ) : $categories;
 
-	return $args;
+	return $event;
 }
 
 
@@ -846,44 +864,6 @@ function myignite_strip_venue_organizer_for_ics( $event, $item ) {
 	return $event;
 }
 
-// -----------------------------------------------------------------------
-// TEMPORARY DEBUG (round 2) — description/newline question is answered
-// (CampusGroups-side, not fixable here). Now isolating exactly which
-// Event Aggregator hook actually controls category term creation, since
-// tribe_aggregator_save_event_args never fired on the last test import —
-// meaning our category fix, hooked to that same filter, never ran either.
-// Writes to wp-content/debug.log only, doesn't change any saved data.
-// -----------------------------------------------------------------------
-add_filter( 'tribe_aggregator_save_event_args', function ( $args ) {
-	error_log( 'MYIGNITE DEBUG2 — save_event_args[categories]: ' . var_export( $args['categories'] ?? 'NOT SET', true ) );
-	return $args;
-}, 1 );
-
-add_filter( 'tribe_aggregator_before_save_event', function ( $event ) {
-	error_log( 'MYIGNITE DEBUG2 — before_save_event[categories]: ' . var_export( $event['categories'] ?? 'NOT SET', true ) );
-	return $event;
-}, 1 );
-
-add_filter( 'tribe_aggregator_before_insert_event', function ( $event ) {
-	error_log( 'MYIGNITE DEBUG2 — before_insert_event[categories]: ' . var_export( $event['categories'] ?? 'NOT SET', true ) );
-	return $event;
-}, 1 );
-
-add_filter( 'tribe_aggregator_before_update_event', function ( $event ) {
-	error_log( 'MYIGNITE DEBUG2 — before_update_event[categories]: ' . var_export( $event['categories'] ?? 'NOT SET', true ) );
-	return $event;
-}, 1 );
-
-add_action( 'tribe_aggregator_after_insert_post', function ( $event, $item, $record ) {
-	if ( empty( $event['ID'] ) ) {
-		return;
-	}
-	$terms = wp_get_post_terms( $event['ID'], 'tribe_events_cat', array( 'fields' => 'names' ) );
-	error_log( "MYIGNITE DEBUG2 — after_insert_post {$event['ID']} final tribe_events_cat terms: " . var_export( $terms, true ) );
-}, 1, 3 );
-// -----------------------------------------------------------------------
-// END TEMPORARY DEBUG (round 2)
-// -----------------------------------------------------------------------
 
 /**
  * Persists the venue/organizer name(s) as plain-text post meta on the
