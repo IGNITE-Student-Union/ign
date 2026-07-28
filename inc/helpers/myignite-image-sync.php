@@ -732,6 +732,27 @@ function myignite_strip_venue_organizer_for_ics( $event, $item ) {
 	return $event;
 }
 
+// -----------------------------------------------------------------------
+// TEMPORARY DEBUG — remove once description-newline and club_acronym
+// category timing are diagnosed. Writes to wp-content/debug.log only,
+// doesn't change any saved data or site behavior.
+// -----------------------------------------------------------------------
+add_filter( 'tribe_aggregator_translate_service_data', function ( $event, $item ) {
+	error_log( 'MYIGNITE DEBUG — raw $item->description: ' . var_export( $item->description ?? null, true ) );
+	error_log( 'MYIGNITE DEBUG — raw $item->categories: ' . var_export( $item->categories ?? null, true ) );
+	error_log( 'MYIGNITE DEBUG — translated $event[categories]: ' . var_export( $event['categories'] ?? 'NOT SET', true ) );
+	error_log( 'MYIGNITE DEBUG — does IGNITECLUBS term already exist in tribe_events_cat? ' . var_export( term_exists( 'IGNITECLUBS', 'tribe_events_cat' ), true ) );
+	return $event;
+}, 1, 2 );
+
+add_filter( 'tribe_aggregator_save_event_args', function ( $args ) {
+	error_log( 'MYIGNITE DEBUG — save_event_args[categories]: ' . var_export( $args['categories'] ?? 'NOT SET', true ) );
+	return $args;
+}, 1 );
+// -----------------------------------------------------------------------
+// END TEMPORARY DEBUG
+// -----------------------------------------------------------------------
+
 /**
  * Persists the venue/organizer name(s) as plain-text post meta on the
  * event, once it has a real ID.
