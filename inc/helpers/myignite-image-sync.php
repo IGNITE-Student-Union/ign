@@ -898,10 +898,54 @@ function myignite_recover_description_linebreaks( $event, $item ) {
 
 	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 		error_log( 'MYIGNITE DEBUG5 — recovered $event[description]: ' . var_export( $recovered, true ) );
+		error_log( 'MYIGNITE DEBUG6 — $event keys right after our fix (translate_service_data): ' . var_export( array_keys( $event ), true ) );
 	}
 
 	return $event;
 }
+
+// -----------------------------------------------------------------------
+// TEMPORARY DEBUG (round 6) — round 5 proved $event['description'] is the
+// wrong key: our recovered text was correctly built, but final post_content
+// still came out flattened, meaning something else builds post_content
+// from a different source entirely. Checking every content-shaped key on
+// $event at the three filters confirmed to actually fire (before_save/
+// before_insert/before_update), to find the one that really feeds
+// post_content. Writes to wp-content/debug.log only, doesn't change any
+// saved data or which key our fix currently writes to.
+// -----------------------------------------------------------------------
+add_filter( 'tribe_aggregator_before_save_event', function ( $event ) {
+	error_log( 'MYIGNITE DEBUG6 — before_save_event ALL keys: ' . var_export( array_keys( $event ), true ) );
+	foreach ( array( 'description', 'content', 'post_content', 'Description' ) as $key ) {
+		if ( isset( $event[ $key ] ) ) {
+			error_log( "MYIGNITE DEBUG6 — before_save_event[{$key}]: " . var_export( $event[ $key ], true ) );
+		}
+	}
+	return $event;
+}, 1 );
+
+add_filter( 'tribe_aggregator_before_insert_event', function ( $event ) {
+	error_log( 'MYIGNITE DEBUG6 — before_insert_event ALL keys: ' . var_export( array_keys( $event ), true ) );
+	foreach ( array( 'description', 'content', 'post_content', 'Description' ) as $key ) {
+		if ( isset( $event[ $key ] ) ) {
+			error_log( "MYIGNITE DEBUG6 — before_insert_event[{$key}]: " . var_export( $event[ $key ], true ) );
+		}
+	}
+	return $event;
+}, 1 );
+
+add_filter( 'tribe_aggregator_before_update_event', function ( $event ) {
+	error_log( 'MYIGNITE DEBUG6 — before_update_event ALL keys: ' . var_export( array_keys( $event ), true ) );
+	foreach ( array( 'description', 'content', 'post_content', 'Description' ) as $key ) {
+		if ( isset( $event[ $key ] ) ) {
+			error_log( "MYIGNITE DEBUG6 — before_update_event[{$key}]: " . var_export( $event[ $key ], true ) );
+		}
+	}
+	return $event;
+}, 1 );
+// -----------------------------------------------------------------------
+// END TEMPORARY DEBUG (round 6)
+// -----------------------------------------------------------------------
 
 // -----------------------------------------------------------------------
 // TEMPORARY DEBUG (round 5) — round 4 confirmed the fix: $item->description
