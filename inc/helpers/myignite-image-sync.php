@@ -387,6 +387,14 @@ function myignite_unschedule_image_sync() {
  *                                   categories (e.g. IGNITECLUBS) already
  *                                   sitting in the database from before the
  *                                   import fix existed.
+ *   wp myignite survey-description-whitespace — read-only report on which
+ *                                   whitespace patterns (multi-space runs,
+ *                                   real newlines, CRLF, literal "\n" text,
+ *                                   non-breaking spaces, tabs) actually
+ *                                   appear across every existing event's
+ *                                   description, to inform a future
+ *                                   paragraph-break reconstruction fix.
+ *                                   Changes nothing.
  */
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	class MyIGNITE_CLI_Commands {
@@ -555,6 +563,112 @@ if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			}
 
 			WP_CLI::success( "Done. Renamed: {$renamed}, Merged: {$merged}, Already correct: {$skipped}." );
+		}
+
+		/**
+		 * Read-only survey of every existing tribe_events post for whitespace
+		 * patterns that likely represent a paragraph break CampusGroups'
+		 * plain-text ICS export flattened away.
+		 *
+		 * Different authoring styles on the CampusGroups side (rich-text
+		 * editor vs. plain text) leave different signatures behind when
+		 * flattened: some collapse to runs of 2+ spaces, some keep a real
+		 * newline, some might carry CRLF, a literal un-escaped "\n" (two
+		 * characters, not a real newline), a non-breaking space, or a tab.
+		 * A single space is indistinguishable from normal sentence spacing
+		 * and can't be recovered — this only surfaces detectable patterns.
+		 *
+		 * Changes nothing. Purpose is to base the eventual paragraph-break
+		 * reconstruction on what's actually in the database across every
+		 * real event, not just the one or two test events seen so far.
+		 *
+		 * ## EXAMPLES
+		 *
+		 *     wp myignite survey-description-whitespace
+		 */
+		public function survey_description_whitespace( $args, $assoc_args ) {
+			global $wpdb;
+			$rows = $wpdb->get_results(
+				"SELECT ID, post_content, post_excerpt FROM {$wpdb->posts}
+				 WHERE post_type = 'tribe_events' AND post_status = 'publish'"
+			);
+
+			$space_run_counts        = array();
+			$has_crlf                = 0;
+			$has_cr_only             = 0;
+			$has_real_newline        = 0;
+			$has_literal_backslash_n = 0;
+			$has_nbsp                = 0;
+			$has_tab                 = 0;
+			$examples                = array();
+
+			$snippet = function ( $text, $pos ) {
+				return trim( substr( $text, max( 0, $pos - 20 ), 60 ) );
+			};
+
+			foreach ( $rows as $row ) {
+				$text = $row->post_content . "\n---\n" . $row->post_excerpt;
+
+				if ( preg_match_all( '/ {2,}/', $text, $matches, PREG_OFFSET_CAPTURE ) ) {
+					foreach ( $matches[0] as $match ) {
+						$len = strlen( $match[0] );
+						$space_run_counts[ $len ] = ( $space_run_counts[ $len ] ?? 0 ) + 1;
+					}
+					if ( ! isset( $examples['multi-space'] ) ) {
+						$examples['multi-space'] = "Event {$row->ID}: ..." . $snippet( $text, $matches[0][0][1] ) . '...';
+					}
+				}
+
+				if ( strpos( $text, "\r\n" ) !== false ) {
+					$has_crlf++;
+				} elseif ( strpos( $text, "\r" ) !== false ) {
+					$has_cr_only++;
+				}
+
+				if ( strpos( $text, "\n" ) !== false ) {
+					$has_real_newline++;
+					if ( ! isset( $examples['real-newline'] ) ) {
+						$examples['real-newline'] = "Event {$row->ID}: ..." . $snippet( $text, strpos( $text, "\n" ) ) . '...';
+					}
+				}
+
+				if ( strpos( $text, '\\n' ) !== false ) {
+					$has_literal_backslash_n++;
+					if ( ! isset( $examples['literal-backslash-n'] ) ) {
+						$examples['literal-backslash-n'] = "Event {$row->ID}: ..." . $snippet( $text, strpos( $text, '\\n' ) ) . '...';
+					}
+				}
+
+				if ( strpos( $text, "\u{00A0}" ) !== false ) {
+					$has_nbsp++;
+				}
+
+				if ( strpos( $text, "\t" ) !== false ) {
+					$has_tab++;
+				}
+			}
+
+			WP_CLI::log( 'Scanned ' . count( $rows ) . ' published tribe_events posts.' );
+			WP_CLI::log( '' );
+			WP_CLI::log( 'Multi-space runs (likely collapsed paragraph breaks), by run length:' );
+			ksort( $space_run_counts );
+			foreach ( $space_run_counts as $len => $count ) {
+				WP_CLI::log( "  {$len} spaces: {$count} occurrence(s) across all events" );
+			}
+			WP_CLI::log( '' );
+			WP_CLI::log( "Events containing a real newline character: {$has_real_newline}" );
+			WP_CLI::log( "Events containing CRLF (\\r\\n): {$has_crlf}" );
+			WP_CLI::log( "Events containing a lone CR (\\r) with no LF: {$has_cr_only}" );
+			WP_CLI::log( "Events containing literal escaped \"\\n\" as text (not a real newline): {$has_literal_backslash_n}" );
+			WP_CLI::log( "Events containing a non-breaking space: {$has_nbsp}" );
+			WP_CLI::log( "Events containing a tab character: {$has_tab}" );
+			WP_CLI::log( '' );
+			WP_CLI::log( 'Sample snippets:' );
+			foreach ( $examples as $label => $text ) {
+				WP_CLI::log( "  [{$label}] {$text}" );
+			}
+
+			WP_CLI::success( 'Survey complete. No data was changed.' );
 		}
 	}
 
