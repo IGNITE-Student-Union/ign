@@ -1185,7 +1185,8 @@
 
 .tribe-events .tribe-events-calendar-list__event-date-tag-weekday,
 .tribe-events .tribe-events-calendar-list__event-date-tag-datetime,
-.tribe-events .tribe-events-calendar-list__event-description {
+.tribe-events .tribe-events-calendar-list__event-description,
+.tribe-events .tribe-events-calendar-list__event-venue {
 	font-family: var(--font-sans) !important;
 }
 
