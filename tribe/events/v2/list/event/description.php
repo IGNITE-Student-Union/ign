@@ -2,35 +2,21 @@
 /**
  * List View — Event Description
  *
- * Overrides the default excerpt in the archive/list view: no "[…]"
- * read-more suffix, and cut off after the first sentence rather than an
- * arbitrary word count. The 55-word `excerpt_length` filter (see
- * functions.php) still applies underneath as a safety net for an
- * unusually long opening sentence, or one with no punctuation at all.
+ * Shows the full content verbatim, no word cap or sentence cutoff.
  *
- * Deliberately NOT split on any line-break/blank-line convention.
- * MyIGNITE's paragraph formatting has proven inconsistent across real
- * event content — sometimes a blank line separates paragraphs, sometimes
- * a single line break does, sometimes breaks don't survive the import at
- * all — so no whitespace-based rule can reliably tell "end of intended
- * preview" from "just a line wrap." Splitting on the first sentence-
- * ending punctuation instead only requires the author's opening sentence
- * to end in a real period/!/? — independent of formatting entirely.
- * (Known limitation: an abbreviation like "Mr." at the very start of the
- * description would be mistaken for a sentence end. Not handled — true
- * sentence-boundary detection is a much bigger problem than this needs.)
+ * MyIGNITE's "detailed description" box never reaches WordPress through
+ * the ICS feed at all (confirmed directly from raw import data — only
+ * the short "description" box's content ever shows up in $item), and
+ * every event link on this page now goes straight to MyIGNITE instead of
+ * an internal single-event page (see inc/functions/tribe-events.php).
+ * With nothing to protect the preview from and no full page for it to
+ * link to, there's no reason to cut this short anymore — whatever's in
+ * the short description box is exactly what should show here, in full.
  *
- * A multi-sentence version (span several short sentences up to 55 words)
- * was tried and reverted — it correlated with the full single-event
- * description also getting cut down to roughly excerpt length, cause not
- * yet confirmed. Back to single-sentence until that's understood.
+ * A manual excerpt (Gutenberg's own Excerpt panel) still wins when one
+ * is set — editors can override the content-derived text entirely.
  *
  * Override of: [plugin]/src/views/v2/list/event/description.php
- *
- * A manual excerpt (Gutenberg's own Excerpt panel) always wins when one
- * is set — editors can override the auto-computed preview entirely.
- * The sentence-based logic below only runs as a fallback when no manual
- * excerpt exists.
  *
  * @link http://evnt.is/1aiy
  */
@@ -38,20 +24,8 @@
 if ( has_excerpt() ) {
 	$excerpt = get_the_excerpt();
 } else {
-	$full  = get_the_content( null, false, get_the_ID() );
-	$plain = trim( wp_strip_all_tags( $full ) );
-
-	// Cut after the first sentence-ending punctuation.
-	if ( preg_match( '/^.*?[.!?](?=\s|$)/s', $plain, $matches ) ) {
-		$first_sentence = trim( $matches[0] );
-	} else {
-		$first_sentence = $plain;
-	}
-
-	// Safety net: never exceed 55 words even if the opening "sentence" is
-	// unusually long or has no punctuation at all. Empty $more so no "[…]"
-	// gets appended.
-	$excerpt = wp_trim_words( $first_sentence, 55, '' );
+	$full    = get_the_content( null, false, get_the_ID() );
+	$excerpt = trim( wp_strip_all_tags( $full ) );
 }
 ?>
 

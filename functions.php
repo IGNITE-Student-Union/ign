@@ -85,12 +85,3 @@ add_action('save_post_team_member', function($post_id, $post, $update) {
         }
     }
 }, 5, 3);
-
-// Event excerpts (both TEC's own archive/list view and the Featured Events
-// module) were showing up truncated well short of WordPress's 55-word
-// default. Something is trimming them lower via this same core filter,
-// so re-assert 55 for events specifically at a late priority to win over it.
-// Scoped to tribe_events only — every other post type keeps its own length.
-add_filter( 'excerpt_length', function ( $length ) {
-    return get_post_type() === 'tribe_events' ? 55 : $length;
-}, 99 );
