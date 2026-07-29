@@ -881,6 +881,12 @@ function myignite_strip_venue_organizer_for_ics( $event, $item ) {
  * same way $event['categories'] mirrors $item->categories elsewhere in
  * this file — kept alongside a debug line for one more test round to
  * confirm this is really the key that ends up in post_content.
+ * Confirmed via debug logging (round 6) that $event['post_content'] — not
+ * $event['description'] — is the WordPress-native key Event Aggregator
+ * actually uses to build the saved post. It's already present, already
+ * populated from the lossy $item->description, before this filter ever
+ * runs. Writing the recovered text to 'description' had zero effect since
+ * nothing downstream reads that key.
  */
 add_filter( 'tribe_aggregator_translate_service_data', 'myignite_recover_description_linebreaks', 10, 2 );
 function myignite_recover_description_linebreaks( $event, $item ) {
@@ -894,79 +900,34 @@ function myignite_recover_description_linebreaks( $event, $item ) {
 	// real control character) — un-escape into actual line breaks.
 	$recovered = str_replace( array( '\\r\\n', '\\n' ), array( "\n", "\n" ), $item->unsafe_description );
 
-	$event['description'] = $recovered;
+	$event['post_content'] = $recovered;
 
 	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-		error_log( 'MYIGNITE DEBUG5 — recovered $event[description]: ' . var_export( $recovered, true ) );
-		error_log( 'MYIGNITE DEBUG6 — $event keys right after our fix (translate_service_data): ' . var_export( array_keys( $event ), true ) );
+		error_log( 'MYIGNITE DEBUG7 — recovered $event[post_content]: ' . var_export( $recovered, true ) );
 	}
 
 	return $event;
 }
 
 // -----------------------------------------------------------------------
-// TEMPORARY DEBUG (round 6) — round 5 proved $event['description'] is the
-// wrong key: our recovered text was correctly built, but final post_content
-// still came out flattened, meaning something else builds post_content
-// from a different source entirely. Checking every content-shaped key on
-// $event at the three filters confirmed to actually fire (before_save/
-// before_insert/before_update), to find the one that really feeds
-// post_content. Writes to wp-content/debug.log only, doesn't change any
-// saved data or which key our fix currently writes to.
-// -----------------------------------------------------------------------
-add_filter( 'tribe_aggregator_before_save_event', function ( $event ) {
-	error_log( 'MYIGNITE DEBUG6 — before_save_event ALL keys: ' . var_export( array_keys( $event ), true ) );
-	foreach ( array( 'description', 'content', 'post_content', 'Description' ) as $key ) {
-		if ( isset( $event[ $key ] ) ) {
-			error_log( "MYIGNITE DEBUG6 — before_save_event[{$key}]: " . var_export( $event[ $key ], true ) );
-		}
-	}
-	return $event;
-}, 1 );
-
-add_filter( 'tribe_aggregator_before_insert_event', function ( $event ) {
-	error_log( 'MYIGNITE DEBUG6 — before_insert_event ALL keys: ' . var_export( array_keys( $event ), true ) );
-	foreach ( array( 'description', 'content', 'post_content', 'Description' ) as $key ) {
-		if ( isset( $event[ $key ] ) ) {
-			error_log( "MYIGNITE DEBUG6 — before_insert_event[{$key}]: " . var_export( $event[ $key ], true ) );
-		}
-	}
-	return $event;
-}, 1 );
-
-add_filter( 'tribe_aggregator_before_update_event', function ( $event ) {
-	error_log( 'MYIGNITE DEBUG6 — before_update_event ALL keys: ' . var_export( array_keys( $event ), true ) );
-	foreach ( array( 'description', 'content', 'post_content', 'Description' ) as $key ) {
-		if ( isset( $event[ $key ] ) ) {
-			error_log( "MYIGNITE DEBUG6 — before_update_event[{$key}]: " . var_export( $event[ $key ], true ) );
-		}
-	}
-	return $event;
-}, 1 );
-// -----------------------------------------------------------------------
-// END TEMPORARY DEBUG (round 6)
-// -----------------------------------------------------------------------
-
-// -----------------------------------------------------------------------
-// TEMPORARY DEBUG (round 5) — round 4 confirmed the fix: $item->description
-// has already lost every line break by the time we see it, but
-// $item->unsafe_description still carries the break as literal "\n" text.
-// myignite_recover_description_linebreaks() above un-escapes that back
-// into a real newline and writes it to $event['description'] — the same
-// key pattern $event['categories'] uses elsewhere in this file. This round
-// confirms end-to-end that the recovered text actually lands in the saved
-// post_content, not just in $event at translate-time.
-// Writes to wp-content/debug.log only, doesn't change any saved data.
+// TEMPORARY DEBUG (round 7) — round 6 found the real key: $event['post_content']
+// is what Event Aggregator actually saves, not $event['description'] (which
+// nothing downstream reads). myignite_recover_description_linebreaks() now
+// writes the recovered text to 'post_content' instead. This round confirms
+// end-to-end that the fix actually works — that the recovered newlines
+// survive into the real, saved post_content, not just into $event at
+// translate-time. Writes to wp-content/debug.log only, doesn't change any
+// saved data.
 // -----------------------------------------------------------------------
 add_action( 'tribe_aggregator_after_insert_post', function ( $event, $item, $record ) {
 	if ( empty( $event['ID'] ) ) {
 		return;
 	}
 	$post = get_post( $event['ID'] );
-	error_log( "MYIGNITE DEBUG5 — post {$event['ID']} final post_content: " . var_export( $post->post_content ?? 'NOT FOUND', true ) );
+	error_log( "MYIGNITE DEBUG7 — post {$event['ID']} final post_content: " . var_export( $post->post_content ?? 'NOT FOUND', true ) );
 }, 20, 3 );
 // -----------------------------------------------------------------------
-// END TEMPORARY DEBUG (round 5)
+// END TEMPORARY DEBUG (round 7)
 // -----------------------------------------------------------------------
 
 
