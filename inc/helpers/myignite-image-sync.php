@@ -877,11 +877,7 @@ function myignite_strip_venue_organizer_for_ics( $event, $item ) {
  * as text), not an actual newline control character. Un-escaping that
  * back into a real newline recovers the paragraph structure entirely.
  *
- * Best-guess key: $event['description'] mirrors $item->description the
- * same way $event['categories'] mirrors $item->categories elsewhere in
- * this file — kept alongside a debug line for one more test round to
- * confirm this is really the key that ends up in post_content.
- * Confirmed via debug logging (round 6) that $event['post_content'] — not
+ * Confirmed via debug logging that $event['post_content'] — not
  * $event['description'] — is the WordPress-native key Event Aggregator
  * actually uses to build the saved post. It's already present, already
  * populated from the lossy $item->description, before this filter ever
@@ -909,6 +905,43 @@ function myignite_recover_description_linebreaks( $event, $item ) {
 	return $event;
 }
 
+/**
+ * Corrects the mislabeled timezone CampusGroups sends on every event.
+ *
+ * Confirmed directly from stored postmeta on a real imported event:
+ * _EventStartDate and _EventStartDateUTC are byte-for-byte identical
+ * (both "17:00:00"), because _EventTimezone was saved as "UTC". That's
+ * not a WordPress/TEC bug — they faithfully stored exactly what the feed
+ * declared. CampusGroups sends the real Toronto wall-clock time but
+ * labels it UTC instead of converting it or declaring "America/Toronto",
+ * so every event has shown up shifted by the Toronto/UTC offset (4-5
+ * hours depending on daylight saving).
+ *
+ * Fix: treat the wall-clock value CampusGroups sends as genuinely
+ * America/Toronto local time — override the declared timezone before
+ * TEC computes the UTC fields from it, rather than trusting the feed's
+ * mislabeled "UTC". $event['EventTimezone'] confirmed as a real key via
+ * the same debug logging used to find $event['post_content'].
+ *
+ * Only fixes events going through this filter (new imports / re-syncs
+ * from here on) — events already saved with _EventTimezone = UTC keep
+ * their wrong stored dates until re-synced or otherwise corrected.
+ */
+add_filter( 'tribe_aggregator_translate_service_data', 'myignite_fix_campusgroups_timezone', 10, 2 );
+function myignite_fix_campusgroups_timezone( $event, $item ) {
+	global $myignite_ea_is_ics_import;
+
+	if ( empty( $myignite_ea_is_ics_import ) ) {
+		return $event;
+	}
+
+	if ( isset( $item->timezone ) && 'UTC' === $item->timezone ) {
+		$event['EventTimezone'] = 'America/Toronto';
+	}
+
+	return $event;
+}
+
 // -----------------------------------------------------------------------
 // TEMPORARY DEBUG (round 7) — round 6 found the real key: $event['post_content']
 // is what Event Aggregator actually saves, not $event['description'] (which
@@ -925,6 +958,12 @@ add_action( 'tribe_aggregator_after_insert_post', function ( $event, $item, $rec
 	}
 	$post = get_post( $event['ID'] );
 	error_log( "MYIGNITE DEBUG7 — post {$event['ID']} final post_content: " . var_export( $post->post_content ?? 'NOT FOUND', true ) );
+
+	$tz_meta = array();
+	foreach ( array( '_EventTimezone', '_EventStartDate', '_EventStartDateUTC', '_EventEndDate', '_EventEndDateUTC' ) as $key ) {
+		$tz_meta[ $key ] = get_post_meta( $event['ID'], $key, true );
+	}
+	error_log( "MYIGNITE DEBUG8 — post {$event['ID']} timezone meta: " . var_export( $tz_meta, true ) );
 }, 20, 3 );
 // -----------------------------------------------------------------------
 // END TEMPORARY DEBUG (round 7)
