@@ -24,42 +24,51 @@
  *
  * Override of: [plugin]/src/views/v2/list/event/description.php
  *
+ * A manual excerpt (Gutenberg's own Excerpt panel) always wins when one
+ * is set — editors can override the auto-computed preview entirely.
+ * The sentence-based logic below only runs as a fallback when no manual
+ * excerpt exists.
+ *
  * @link http://evnt.is/1aiy
  */
 
-$full  = get_the_content( null, false, get_the_ID() );
-$plain = trim( wp_strip_all_tags( $full ) );
+if ( has_excerpt() ) {
+	$excerpt = get_the_excerpt();
+} else {
+	$full  = get_the_content( null, false, get_the_ID() );
+	$plain = trim( wp_strip_all_tags( $full ) );
 
-// Split into sentences, each one keeping its own ending punctuation.
-// The second alternative catches any leftover text with no ending
-// punctuation at all (either a trailing fragment, or the whole string
-// if it has no . ! ? anywhere).
-preg_match_all( '/[^.!?]*[.!?](?=\s|$)|[^.!?]+$/', $plain, $sentence_matches );
-$sentences = array_filter( array_map( 'trim', $sentence_matches[0] ) );
+	// Split into sentences, each one keeping its own ending punctuation.
+	// The second alternative catches any leftover text with no ending
+	// punctuation at all (either a trailing fragment, or the whole string
+	// if it has no . ! ? anywhere).
+	preg_match_all( '/[^.!?]*[.!?](?=\s|$)|[^.!?]+$/', $plain, $sentence_matches );
+	$sentences = array_filter( array_map( 'trim', $sentence_matches[0] ) );
 
-// Greedily keep whole sentences until the next one would push the total
-// past 55 words, so the excerpt can span multiple sentences but always
-// ends at a real sentence boundary.
-$excerpt    = '';
-$word_count = 0;
+	// Greedily keep whole sentences until the next one would push the total
+	// past 55 words, so the excerpt can span multiple sentences but always
+	// ends at a real sentence boundary.
+	$excerpt    = '';
+	$word_count = 0;
 
-foreach ( $sentences as $sentence ) {
-	$sentence_word_count = count( preg_split( '/\s+/', $sentence ) );
+	foreach ( $sentences as $sentence ) {
+		$sentence_word_count = count( preg_split( '/\s+/', $sentence ) );
 
-	// First sentence alone already exceeds the cap — hard-cut it, same
-	// safety-net behavior an unusually long single sentence always had.
-	// Empty $more so no "[…]" gets appended.
-	if ( '' === $excerpt && $sentence_word_count > 55 ) {
-		$excerpt = wp_trim_words( $sentence, 55, '' );
-		break;
+		// First sentence alone already exceeds the cap — hard-cut it, same
+		// safety-net behavior an unusually long single sentence always had.
+		// Empty $more so no "[…]" gets appended.
+		if ( '' === $excerpt && $sentence_word_count > 55 ) {
+			$excerpt = wp_trim_words( $sentence, 55, '' );
+			break;
+		}
+
+		if ( $word_count + $sentence_word_count > 55 ) {
+			break;
+		}
+
+		$excerpt    .= ( '' === $excerpt ? '' : ' ' ) . $sentence;
+		$word_count += $sentence_word_count;
 	}
-
-	if ( $word_count + $sentence_word_count > 55 ) {
-		break;
-	}
-
-	$excerpt    .= ( '' === $excerpt ? '' : ' ' ) . $sentence;
-	$word_count += $sentence_word_count;
 }
 ?>
 
