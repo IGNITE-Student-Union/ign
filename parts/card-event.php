@@ -19,9 +19,15 @@ $schedule          = function_exists( 'tribe_events_event_schedule_details' )
 	? tribe_events_event_schedule_details( $event_id )
 	: '';
 $show_tags         = $args['showTags'] ?? true;
+
+// Links to the event's MyIGNITE page (where RSVPs actually happen) instead
+// of the internal single-event page, falling back to the internal
+// permalink only if no Event Website URL was set.
+$website   = tribe_get_event_website_url( $event_id );
+$permalink = $website ? $website : get_permalink( $event_id );
 ?>
 <div class="card-post <?php echo esc_attr( $accent_class ); ?>">
-	<a href="<?php the_permalink(); ?>" class="block group no-underline! h-full" rel="bookmark">
+	<a href="<?php echo esc_url( $permalink ); ?>" <?php echo $website ? 'target="_blank" rel="noopener noreferrer"' : 'rel="bookmark"'; ?> class="block group no-underline! h-full">
 		<div class="flex flex-col gap-6 h-full dark:text-white">
 			<?php if ( has_post_thumbnail() ) : ?>
 				<div class="mask-small relative overflow-hidden">
@@ -54,7 +60,12 @@ $show_tags         = $args['showTags'] ?? true;
 			<div class="mt-auto">
 				<span class="card-post-cta btn-tertiary group-hover:text-[var(--accent-color)]! transition-colors">
 					<?php esc_html_e( 'View Event', 'takt' ); ?>
-					<span class="sr-only"><?php echo esc_html( sprintf( __( ': %s', 'takt' ), get_the_title() ) ); ?></span>
+					<span class="sr-only">
+						<?php
+						echo esc_html( ': ' . get_the_title() );
+						echo $website ? esc_html( ' (' . __( 'opens in a new tab', 'takt' ) . ')' ) : '';
+						?>
+					</span>
 					<span class="btn-tertiary-arrow w-5 h-4 *:w-full *:h-full"><?php theme_asset( 'images/tertiary-arrow.svg' ); ?></span>
 				</span>
 			</div>

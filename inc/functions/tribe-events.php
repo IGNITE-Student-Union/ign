@@ -121,3 +121,43 @@ function theme_strip_campusgroups_event_details_footer( $data ) {
 
 	return $data;
 }
+
+/**
+ * Point every event link at its MyIGNITE (Event Website) URL instead of
+ * the internal single-event page.
+ *
+ * The single-event page is no longer where visitors are meant to end up —
+ * the archive/list view and the Featured Events module now exist to help
+ * students find an event, and MyIGNITE (the source of truth, where RSVPs
+ * actually happen) is the destination. tribe_get_event() decorates every
+ * event post with a ->permalink property that TEC's own templates read
+ * for all their links (the archive/list, month, day views, etc.) — same
+ * convention the list-view description override already relies on
+ * ($event->excerpt). Overriding it here at priority 100 covers every
+ * stock TEC view in one place, without needing separate template
+ * overrides for each link (title, image, "Find out more", etc.).
+ *
+ * tribe_get_event_website_url() returns empty for an event with no
+ * Website URL set, in which case the original internal permalink is left
+ * untouched — this only takes over when there's actually somewhere to
+ * send visitors.
+ *
+ * Our own custom templates (Featured Events cards, the Dynamic Content
+ * Carousel's event card) build their links directly via get_permalink()/
+ * the_permalink() rather than reading $event->permalink, so they're
+ * updated separately to match.
+ */
+add_filter( 'tribe_get_event', 'myignite_point_event_link_to_myignite', 100 );
+function myignite_point_event_link_to_myignite( $event ) {
+	if ( empty( $event->ID ) ) {
+		return $event;
+	}
+
+	$website = tribe_get_event_website_url( $event->ID );
+
+	if ( $website ) {
+		$event->permalink = $website;
+	}
+
+	return $event;
+}

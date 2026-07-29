@@ -15,7 +15,11 @@
 $button_label  = $args['buttonLabel'] ?? __( 'View Event', 'takt' );
 $is_full_width = $args['isFullWidth'] ?? false;
 $event_id      = get_the_ID();
-$permalink     = get_permalink( $event_id );
+// Links to the event's MyIGNITE page (where RSVPs actually happen) instead
+// of the internal single-event page, falling back to the internal
+// permalink only if no Event Website URL was set.
+$website   = tribe_get_event_website_url( $event_id );
+$permalink = $website ? $website : get_permalink( $event_id );
 
 $start_date    = get_post_meta( $event_id, '_EventStartDate', true );
 $venue_id      = get_post_meta( $event_id, '_EventVenueID', true );
@@ -38,7 +42,7 @@ if ( $start_date ) {
 ?>
 
 <div data-animate="fade-up" class="<?php echo class_name( [ 'md:col-span-2' => $is_full_width ] ); ?>">
-	<a href="<?php echo esc_url( $permalink ); ?>" class="relative flex flex-col gap-6 p-4 md:p-8 text-white group no-underline! w-full before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:-inset-y-4 md:before:inset-y-0 md:before:-inset-x-(--bg-extend)">
+	<a href="<?php echo esc_url( $permalink ); ?>" <?php echo $website ? 'target="_blank" rel="noopener noreferrer"' : ''; ?> class="relative flex flex-col gap-6 p-4 md:p-8 text-white group no-underline! w-full before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:-inset-y-4 md:before:inset-y-0 md:before:-inset-x-(--bg-extend)">
 		<?php /* Image */ ?>
 		<div class="relative flex flex-col items-end w-full overflow-hidden rounded-xl p-2 aspect-[4/3]">
 			<?php if ( has_post_thumbnail() ) : ?>
@@ -71,7 +75,12 @@ if ( $start_date ) {
 
 		<span class="btn-tertiary text-white group-hover:text-[var(--accent-color)]!">
 			<?php echo esc_html( $button_label ); ?>
-			<span class="sr-only"><?php echo wp_kses_post( sprintf( __( ': %s', 'takt' ), get_the_title() ) ); ?></span>
+			<span class="sr-only">
+				<?php
+				echo esc_html( ': ' . get_the_title() );
+				echo $website ? esc_html( ' (' . __( 'opens in a new tab', 'takt' ) . ')' ) : '';
+				?>
+			</span>
 			<span class="btn-tertiary-arrow w-5 h-4 *:w-full *:h-full"><?php theme_asset( 'images/tertiary-arrow.svg' ); ?></span>
 		</span>
 	</a>
