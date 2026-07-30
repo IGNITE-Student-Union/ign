@@ -63,11 +63,6 @@
 	.archive.dark[data-post-type="post"] .archive-results .grid > *:not(:nth-child(4n + 1))::before {
 		background: white;
 	}
-
-	/* Blog card: increase gap between content and CTA (Figma margin-7 = 96px) */
-	.archive[data-post-type="post"] .card-post .mt-auto {
-		padding-top: 4rem;
-	}
 }
 
 /* Blog card: tighter title line-height per Figma (1.1 vs theme default 1.2) */
