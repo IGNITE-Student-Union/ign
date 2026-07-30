@@ -36,52 +36,32 @@
 
 /* ── Blog post type: xl desktop layout overrides ── */
 @media (min-width: 1280px) {
-	/* 4-column grid with increased row gap; padding handles column spacing */
+	/* 4-column grid; a real column-gap (not padding) keeps all 4 image columns the same
+	   width, so a divider line drawn in the gap doesn't have to steal width unevenly
+	   from edge vs. middle cards (that unevenness was the cause of staggered tags). */
 	.archive[data-post-type="post"] .archive-results .grid {
 		grid-template-columns: repeat(4, 1fr) !important;
-		column-gap: 0 !important;
+		column-gap: 4rem !important;
 		row-gap: 4rem;
 	}
 
-	/* Vertical dividers between cards via border-left + padding for 32px gap each side */
 	.archive[data-post-type="post"] .archive-results .grid > * {
-		padding-left: 2rem;
-		padding-right: 2rem;
-		border-left: 1px solid var(--color-charcoal);
+		position: relative;
 	}
 
-	.archive.dark[data-post-type="post"] .archive-results .grid > * {
-		border-left-color: white;
+	/* Divider line centered in the gap, before every card except the first in a row */
+	.archive[data-post-type="post"] .archive-results .grid > *:not(:nth-child(4n + 1))::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: -2rem;
+		width: 1px;
+		background: var(--color-charcoal);
 	}
 
-	/* First-in-row: no divider, flush left (positions 1, 5, 9, 13…) */
-	.archive[data-post-type="post"] .archive-results .grid > *:nth-child(4n+1) {
-		border-left: none;
-		padding-left: 0;
-	}
-
-	/* Last-in-row: flush right (positions 4, 8, 12, 16…) */
-	.archive[data-post-type="post"] .archive-results .grid > *:nth-child(4n) {
-		padding-right: 0;
-	}
-
-	/* Featured image should span the full column width regardless of the card's own
-	   divider padding, so image height (and everything below it) lines up across all
-	   4 columns instead of edge cards getting taller images than middle cards. */
-	.archive[data-post-type="post"] .archive-results .grid > * .mask-small {
-		margin-left: -2rem;
-		margin-right: -2rem;
-		width: calc(100% + 4rem);
-	}
-
-	.archive[data-post-type="post"] .archive-results .grid > *:nth-child(4n + 1) .mask-small {
-		margin-left: 0;
-		width: calc(100% + 2rem);
-	}
-
-	.archive[data-post-type="post"] .archive-results .grid > *:nth-child(4n) .mask-small {
-		margin-right: 0;
-		width: calc(100% + 2rem);
+	.archive.dark[data-post-type="post"] .archive-results .grid > *:not(:nth-child(4n + 1))::before {
+		background: white;
 	}
 
 	/* Blog card: increase gap between content and CTA (Figma margin-7 = 96px) */
