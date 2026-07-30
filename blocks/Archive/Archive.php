@@ -326,7 +326,7 @@ $query = new WP_Query( $args );
 									<?php if ( $show_per_page ) : ?>
 										<div class="flex items-center gap-2 whitespace-nowrap">
 											<span class="text-body-small uppercase font-medium tracking-wider"><?php esc_html_e( 'Show', 'takt' ); ?></span>
-											<select data-type="per_page" name="<?php echo esc_attr( $per_page_var ); ?>" class="w-20" aria-label="<?php esc_attr_e( 'Items per page', 'takt' ); ?>">
+											<select data-type="per_page" name="<?php echo esc_attr( $per_page_var ); ?>" class="w-28 text-center" aria-label="<?php esc_attr_e( 'Items per page', 'takt' ); ?>">
 												<?php foreach ( $per_page_options as $option ) : ?>
 													<option value="<?php echo esc_attr( $option ); ?>" <?php selected( $posts_per, $option ); ?>>
 														<?php echo esc_html( $option ); ?>
