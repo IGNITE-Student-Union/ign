@@ -21,10 +21,10 @@ if ( ! empty( $categories ) ) {
 	<a href="<?php the_permalink(); ?>" class="block group no-underline! h-full">
 		<div class="flex flex-col gap-6 h-full dark:text-white">
 			<?php if ( has_post_thumbnail() ) : ?>
-				<div class="mask-small relative overflow-hidden">
+				<div class="mask-small relative overflow-hidden aspect-[281/333]">
 					<?php
 					the_post_thumbnail( 'full', [
-						'class' => 'w-full aspect-[281/333] object-cover group-hover:scale-105 transition-transform duration-300',
+						'class' => 'absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300',
 					] );
 					?>
 				</div>

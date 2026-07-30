@@ -65,8 +65,27 @@
 		padding-right: 0;
 	}
 
+	/* Featured image should span the full column width regardless of the card's own
+	   divider padding, so image height (and everything below it) lines up across all
+	   4 columns instead of edge cards getting taller images than middle cards. */
+	.archive[data-post-type="post"] .archive-results .grid > * .mask-small {
+		margin-left: -2rem;
+		margin-right: -2rem;
+		width: calc(100% + 4rem);
+	}
+
+	.archive[data-post-type="post"] .archive-results .grid > *:nth-child(4n + 1) .mask-small {
+		margin-left: 0;
+		width: calc(100% + 2rem);
+	}
+
+	.archive[data-post-type="post"] .archive-results .grid > *:nth-child(4n) .mask-small {
+		margin-right: 0;
+		width: calc(100% + 2rem);
+	}
+
 	/* Blog card: increase gap between content and CTA (Figma margin-7 = 96px) */
-	.archive[data-post-type="post"] .card-post article > :last-child {
+	.archive[data-post-type="post"] .card-post .mt-auto {
 		padding-top: 4rem;
 	}
 }
