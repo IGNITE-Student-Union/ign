@@ -231,10 +231,12 @@ document.addEventListener( 'DOMContentLoaded', () => {
         tablist.setAttribute( 'aria-label', tablistLabel );
       }
       tabButtons.forEach( ( btn ) => btn.setAttribute( 'role', 'tab' ) );
-      detailsItems.forEach( ( details ) => {
+      detailsItems.forEach( ( details, i ) => {
         const content = details.querySelector( '.tabs-item-content' );
         if ( content ) {
           content.setAttribute( 'role', 'tabpanel' );
+          content.setAttribute( 'tabindex', '0' );
+          content.setAttribute( 'aria-labelledby', tabButtons[ i ].id );
         }
       } );
 
