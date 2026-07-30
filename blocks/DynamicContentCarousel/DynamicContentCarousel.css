@@ -9,27 +9,7 @@
 	--gradient-right: var(--color-blue);
 }
 
-/* ── Blog post type: alternating card layout and dividers ── */
-
-/* Even slides: swap image below text */
-.dynamic-content-carousel[data-post-type="post"]
-	.swiper-slide:nth-child(even)
-	article
-	> :first-child {
-	order: 1;
-}
-
-.dynamic-content-carousel[data-post-type="post"]
-	.swiper-slide:nth-child(even)
-	article
-	> :last-child {
-	order: 2;
-}
-
-/* Text-first cards: remove content top padding so pill is flush */
-.dynamic-content-carousel[data-post-type="post"] .swiper-slide:nth-child(even) .card-post-content {
-	padding-top: 0;
-}
+/* ── Blog post type: dividers ── */
 
 /* Extend swiper beyond container so edge slides are flush while keeping consistent card widths */
 .dynamic-content-carousel[data-post-type="post"] .dynamic-content-carousel-swiper {
@@ -55,9 +35,4 @@
 	bottom: 0;
 	width: 1px;
 	background: currentColor;
-}
-
-/* Blog card: increase gap between content and CTA (match Archive block) */
-.dynamic-content-carousel[data-post-type="post"] .card-post article > :last-child {
-	padding-top: 4rem;
 }
