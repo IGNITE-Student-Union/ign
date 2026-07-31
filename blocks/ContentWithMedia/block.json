@@ -46,6 +46,10 @@
       "default": "gallery",
       "enum": ["single", "gallery"]
     },
+    "showAllImagesOnMobile": {
+      "type": "boolean",
+      "default": true
+    },
     "images": {
       "type": "array",
       "default": [

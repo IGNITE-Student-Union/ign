@@ -9,6 +9,7 @@ import {
 import {
 	PanelBody,
 	BaseControl,
+	ToggleControl,
 	ToolbarButton,
 	ToolbarGroup,
 	__experimentalToggleGroupControl as ToggleGroupControl,
@@ -46,6 +47,7 @@ type ContentWithMediaAttributes = {
 	headingSize: "small" | "regular";
 	mediaType: "image" | "video";
 	imageLayout: "single" | "gallery";
+	showAllImagesOnMobile: boolean;
 	images: ImageAttribute[];
 	videoSource: "file" | "youtube" | "vimeo";
 	videoFile?: number;
@@ -217,6 +219,20 @@ export default function Edit({ attributes, setAttributes, clientId }: EditProps)
 							<ToggleGroupControlOption value="single" label={__("Image", "takt")} />
 							<ToggleGroupControlOption value="gallery" label={__("Gallery", "takt")} />
 						</ToggleGroupControl>
+					)}
+
+					{attributes.mediaType === "image" && attributes.imageLayout === "gallery" && (
+						<ToggleControl
+							label={__("Show All Images on Mobile", "takt")}
+							help={
+								attributes.showAllImagesOnMobile
+									? __("All three images are shown on mobile and desktop.", "takt")
+									: __("Only the main image is shown on mobile; all three remain on desktop.", "takt")
+							}
+							checked={attributes.showAllImagesOnMobile}
+							onChange={(value) => setAttributes({ showAllImagesOnMobile: value })}
+							__nextHasNoMarginBottom
+						/>
 					)}
 
 					{attributes.mediaType === "video" && (
@@ -417,7 +433,12 @@ export default function Edit({ attributes, setAttributes, clientId }: EditProps)
 										</div>
 
 										{/* Secondary images row - left large, right always small */}
-										<div className="flex gap-4 items-start">
+										<div
+											className={cn({
+												"flex gap-4 items-start": true,
+												"max-md:hidden": !attributes.showAllImagesOnMobile
+											})}
+										>
 											<div className="flex-1 aspect-[366/203] overflow-hidden rounded-xl md:rounded-3xl">
 												<ImageDropUploader
 													image={attributes.images[1]}

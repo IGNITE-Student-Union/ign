@@ -13,6 +13,7 @@
  * @var string      $headingSize
  * @var string      $mediaType
  * @var string      $imageLayout
+ * @var bool        $showAllImagesOnMobile
  * @var array       $images
  * @var string      $videoSource
  * @var int|null    $videoFile
@@ -174,7 +175,16 @@ echo class_name(
 
 			<?php if ( ! empty( $images[1]['id'] ) || ! empty( $images[2]['id'] ) ) : ?>
 				<?php // Secondary images row - left large, right always small ?>
-			  <div class="flex gap-4 items-start">
+			  <div class="
+				<?php
+				echo class_name(
+					[
+						'flex gap-4 items-start' => true,
+						'max-md:hidden' => ! $showAllImagesOnMobile,
+					]
+				);
+				?>
+			  ">
 				<?php if ( ! empty( $images[1]['id'] ) ) : ?>
 				  <div class="flex-1 aspect-[366/203] overflow-hidden rounded-xl md:rounded-3xl">
 					<?php
