@@ -195,6 +195,16 @@
 	padding-right: 1rem;
 }
 
+/* Fix per-page select width: forms.css's unlayered `select { width: 100% }` base rule
+   always wins over the Tailwind `w-28` utility (Tailwind utilities live in @layer,
+   which unlayered CSS beats regardless of specificity). Without this, the select's
+   width is whatever the surrounding flex row leaves over, which can shrink it down
+   to just its own padding — hiding the selected number entirely. */
+.archive select[data-type="per_page"] {
+	width: 7rem !important;
+	flex-shrink: 0;
+}
+
 @property --pill-gradient-opacity {
 	syntax: "<number>";
 	initial-value: 0;
