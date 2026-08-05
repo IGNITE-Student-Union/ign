@@ -38,7 +38,12 @@ add_action( 'init', 'theme_maybe_flush_post_rewrite_rules', 99 );
 function theme_change_blog_links($post_link, $id = 0){
     $post = get_post($id);
 
-    if( is_object($post) && $post->post_type == 'post'){
+    // Only published posts have a stable slug and a canonical /blog/ URL to
+    // redirect to. Draft/pending/future/auto-draft posts often have an empty
+    // post_name, and WP core already builds a correct ?p={ID} link (and, for
+    // previews, appends preview=true/nonce to it) for these statuses — let
+    // that through instead of producing a malformed /blog//slug.
+    if( is_object($post) && $post->post_type == 'post' && $post->post_status === 'publish' && $post->post_name !== '' ){
         return home_url('/blog/'. $post->post_name.'/');
     }
 
