@@ -5,19 +5,32 @@
  * Problem this solves:
  * Events imported from the ReadyEducation CampusGroups ICS feed (via The
  * Events Calendar's Event Aggregator) never carry an image, because ICS
- * feeds have no image field. CampusGroups DOES put the original event
- * page URL into the imported event's "Event Website" field. That public
- * event page has an <meta property="og:image"> tag IF an image was
- * uploaded when the event was created on CampusGroups — and has no such
- * tag at all if it wasn't. This script:
+ * feeds have no image field. This script:
  *
  *   1. Finds events that have a Website URL but no featured image yet.
- *   2. Fetches that CampusGroups page.
- *   3. Looks for og:image. If absent, skips the event — this is expected
- *      and not an error (CampusGroups organizer just didn't upload one).
- *   4. If present, downloads the image and sets it as the event's
+ *   2. Looks up the event's own uploaded photo via CampusGroups' public
+ *      events-list API (mobile_ws), matched by the CampusGroups event ID
+ *      embedded in the Website URL (?id=NNNNNN). This is the same photo
+ *      shown on the MyIGNITE events list, and is unaffected by whatever
+ *      "Event Website" link an organizer set on the event.
+ *   3. Falls back to scraping <meta property="og:image"> off the Website
+ *      URL itself if the API doesn't have the event (e.g. it's no longer
+ *      listed as upcoming), or skips if neither has an image — this is
+ *      expected and not an error (CampusGroups organizer just didn't
+ *      upload one).
+ *   4. Downloads whichever image was found and sets it as the event's
  *      WordPress featured image (which is what The Events Calendar uses
  *      for event listing/single-event images).
+ *
+ * Why not just always scrape og:image (the original, simpler approach):
+ * confirmed against a real event ("Sleep Lounge Opens") that og:image on
+ * a CampusGroups RSVP page does NOT reliably reflect the event's own
+ * photo — CampusGroups let an unrelated "Event Website" link set on the
+ * event override it, resolving to this site's default logo (an SVG,
+ * which WordPress rejects). Because the old approach never marked the
+ * event as "resolved," that produced an identical error every single
+ * hour indefinitely, with no way for it to ever self-correct. See
+ * myignite_fetch_campusgroups_event_photos() for the full story.
  *
  * Runs two ways:
  *   - On a schedule, hourly, via WP-Cron (paired with WP Engine's
@@ -70,6 +83,15 @@ define( 'MYIGNITE_SYNC_MAX_PER_RUN', 50 );
 // chance of being rate-limited or blocked outright.
 define( 'MYIGNITE_SYNC_REQUEST_DELAY', 1 );
 
+// CampusGroups' mobile web service that backs the public events list at
+// my.ignitestudentunion.ca/events. Confirmed via the site's own network
+// requests to require no authentication. Returns each event's own
+// uploaded photo directly (field "eventPicture", keyed by "eventId") —
+// this is the authoritative source and is preferred over scraping
+// og:image (see myignite_fetch_campusgroups_event_photos() below for why).
+define( 'MYIGNITE_CAMPUSGROUPS_EVENTS_API', 'https://my.ignitestudentunion.ca/mobile_ws/v17/mobile_events_list' );
+define( 'MYIGNITE_CAMPUSGROUPS_HOST', 'https://my.ignitestudentunion.ca' );
+
 
 // -----------------------------------------------------------------------
 // LOGGING
@@ -113,13 +135,220 @@ function myignite_block_log_file_access() {
 // -----------------------------------------------------------------------
 
 /**
- * Run the full sync: find eligible events, attempt to pull an image for
- * each, log the outcome. This is the single function both the WP-Cron
- * hook and the WP-CLI command call — so behavior is identical whether
- * it's triggered automatically or run manually.
+ * Fetches every event CampusGroups currently has listed and returns each
+ * one's own uploaded photo, keyed by CampusGroups event ID.
+ *
+ * Why this exists (replaces og:image scraping as the primary source):
+ * og:image on an event's CampusGroups RSVP page is NOT reliably the
+ * event's own photo — confirmed against a real event ("Sleep Lounge
+ * Opens") where CampusGroups had a perfectly good photo (visible on the
+ * MyIGNITE events list) but the RSVP page's og:image tag instead reflected
+ * an unrelated external "Event Website" link that had been set on the
+ * event, which itself resolved to this site's default logo (an SVG,
+ * which WordPress won't accept — so the old scrape-based sync failed on
+ * this event every single hour, forever, with no path to ever self-correct).
+ * This mobile_ws endpoint is what CampusGroups' own public events list
+ * uses, so eventPicture here is the same photo staff actually uploaded to
+ * the event — unaffected by whatever "Event Website" link is set.
+ *
+ * The response is a flat array of rows (event rows interleaved with date-
+ * separator rows) where each row is a positional p0../p49 map rather than
+ * named fields. Every row carries a "fields" string naming what each pN
+ * means for that row, so we read field positions from that rather than
+ * hardcoding index numbers — CampusGroups could reorder them without
+ * notice since this is an undocumented internal API, not a public one.
+ *
+ * @return array<int,string> Map of CampusGroups event ID => full photo URL.
+ *                            Empty array if the request fails or nothing
+ *                            back was parseable — callers should treat
+ *                            that as "fall back to og:image", not an error.
+ */
+function myignite_fetch_campusgroups_event_photos() {
+	$response = wp_remote_get(
+		add_query_arg(
+			array(
+				'range' => 0,
+				// Comfortably above the number of events CampusGroups has
+				// listed at once in practice; MYIGNITE_SYNC_MAX_PER_RUN
+				// caps how many WP events we process per run regardless.
+				'limit' => 500,
+			),
+			MYIGNITE_CAMPUSGROUPS_EVENTS_API
+		),
+		array( 'timeout' => 15 )
+	);
+
+	if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+		myignite_sync_log( 'CampusGroups events API request failed — falling back to og:image scraping for this run.' );
+		return array();
+	}
+
+	$rows = json_decode( wp_remote_retrieve_body( $response ), true );
+
+	if ( ! is_array( $rows ) ) {
+		myignite_sync_log( 'CampusGroups events API returned unparseable data — falling back to og:image scraping for this run.' );
+		return array();
+	}
+
+	$photos_by_event_id = array();
+
+	foreach ( $rows as $row ) {
+		if ( empty( $row['fields'] ) ) {
+			continue;
+		}
+
+		$field_names = explode( ',', $row['fields'] );
+		$id_index    = array_search( 'eventId', $field_names, true );
+		$photo_index = array_search( 'eventPicture', $field_names, true );
+
+		if ( false === $id_index || false === $photo_index ) {
+			continue; // A date-separator row, not an event row.
+		}
+
+		$event_id  = $row[ 'p' . $id_index ] ?? '';
+		$photo_url = $row[ 'p' . $photo_index ] ?? '';
+
+		if ( ! ctype_digit( (string) $event_id ) || empty( $photo_url ) ) {
+			continue;
+		}
+
+		// eventPicture is a path relative to the CampusGroups host, e.g.
+		// "/upload/ignite/2026/r2_image_upload_...jpeg".
+		$photos_by_event_id[ (int) $event_id ] = MYIGNITE_CAMPUSGROUPS_HOST . $photo_url;
+	}
+
+	myignite_sync_log( sprintf( 'CampusGroups events API returned photos for %d event(s).', count( $photos_by_event_id ) ) );
+
+	return $photos_by_event_id;
+}
+
+/**
+ * Extracts the numeric CampusGroups event ID from an Event Website URL
+ * such as "https://my.ignitestudentunion.ca/rsvp?id=375489".
+ *
+ * @param string $website_url The _EventURL postmeta value.
+ * @return int|false The event ID, or false if the URL doesn't carry one
+ *                    (e.g. an organizer overwrote it with something else).
+ */
+function myignite_get_campusgroups_event_id( $website_url ) {
+	if ( preg_match( '/[?&]id=(\d+)/', $website_url, $matches ) ) {
+		return (int) $matches[1];
+	}
+	return false;
+}
+
+/**
+ * Memoized wrapper around myignite_fetch_campusgroups_event_photos() so
+ * a single PHP request only ever fetches the CampusGroups events list
+ * once — whether that's the hourly batch processing up to
+ * MYIGNITE_SYNC_MAX_PER_RUN events, or an ICS import batch (see
+ * myignite_sync_image_on_import() below) inserting/updating many events
+ * in one request.
+ *
+ * @return array<int,string>
+ */
+function myignite_get_campusgroups_photos_cached() {
+	static $photos = null;
+
+	if ( null === $photos ) {
+		$photos = myignite_fetch_campusgroups_event_photos();
+	}
+
+	return $photos;
+}
+
+/**
+ * Resolves and sets a featured image for one event: prefers the event's
+ * own CampusGroups photo, falls back to scraping og:image, skips a URL
+ * that's already known to fail (see the postmeta check below), then
+ * downloads and sets whichever image was found. Shared by the hourly
+ * batch sync (myignite_run_image_sync()) and the immediate on-import
+ * hook (myignite_sync_image_on_import()) so both take the exact same
+ * path and can't drift apart.
+ *
+ * @param int        $event_id            WordPress post ID of the event.
+ * @param array|null $campusgroups_photos Pass a pre-fetched map to avoid
+ *                                        a redundant API call inside a
+ *                                        loop; omit to fetch (and cache) it.
+ * @return string One of 'updated', 'skipped', 'error'.
+ */
+function myignite_sync_single_event_image( $event_id, $campusgroups_photos = null ) {
+	if ( null === $campusgroups_photos ) {
+		$campusgroups_photos = myignite_get_campusgroups_photos_cached();
+	}
+
+	// The Events Calendar stores the "Event Website" field in this post
+	// meta key. Confirmed by checking an imported event's custom fields
+	// in wp-admin (classic editor "Event Website" box writes here).
+	$website_url = get_post_meta( $event_id, '_EventURL', true );
+
+	if ( empty( $website_url ) ) {
+		myignite_sync_log( "Event {$event_id}: skipped — no Event Website URL set." );
+		return 'skipped';
+	}
+
+	$cg_event_id = myignite_get_campusgroups_event_id( $website_url );
+
+	if ( $cg_event_id && ! empty( $campusgroups_photos[ $cg_event_id ] ) ) {
+		// Preferred source: the event's own uploaded CampusGroups photo,
+		// unaffected by whatever "Event Website" link happens to be set
+		// on the event.
+		$image_url = $campusgroups_photos[ $cg_event_id ];
+	} else {
+		// Fall back to scraping og:image off the Website URL itself — for
+		// events CampusGroups' events-list API didn't return (e.g. no
+		// longer listed as upcoming), or a non-CampusGroups URL.
+		$image_url = myignite_extract_og_image( $website_url, $event_id );
+
+		if ( false === $image_url ) {
+			// myignite_extract_og_image() already logged the specific
+			// reason, so we don't log again here.
+			return 'skipped';
+		}
+	}
+
+	// If this exact image URL already failed on a previous attempt, don't
+	// re-attempt it every time this runs. CampusGroups filenames are
+	// UUID-based, so an actual fix (new photo uploaded, Website link
+	// changed) always produces a new URL and clears this on its own — no
+	// need for anyone to read the log or intervene by hand.
+	$last_failed_url = get_post_meta( $event_id, '_myignite_last_failed_image_url', true );
+
+	if ( $last_failed_url && $last_failed_url === $image_url ) {
+		myignite_sync_log( "Event {$event_id}: skipped — {$image_url} already failed on a previous attempt and hasn't changed since." );
+		return 'skipped';
+	}
+
+	$result = myignite_set_featured_image_from_url( $event_id, $image_url );
+
+	if ( is_wp_error( $result ) ) {
+		myignite_sync_log( "Event {$event_id}: ERROR — " . $result->get_error_message() );
+		update_post_meta( $event_id, '_myignite_last_failed_image_url', $image_url );
+		return 'error';
+	}
+
+	delete_post_meta( $event_id, '_myignite_last_failed_image_url' );
+	myignite_sync_log( "Event {$event_id}: updated featured image from {$image_url}" );
+	return 'updated';
+}
+
+/**
+ * Run the full batch sync: find every eligible event, attempt to pull an
+ * image for each, log a summary. This is the single function both the
+ * WP-Cron hook and the WP-CLI command call — so behavior is identical
+ * whether it's triggered automatically or run manually. Acts as a
+ * catch-all safety net behind myignite_sync_image_on_import() (below),
+ * covering anything that didn't resolve at import time (e.g. CampusGroups
+ * didn't have the photo yet) — self-correcting on whichever future run
+ * finally sees a usable image.
  */
 function myignite_run_image_sync() {
 	myignite_sync_log( 'Sync run started.' );
+
+	// Fetched once per run rather than per-event: it's a single request
+	// regardless of how many events need it, and gives every event in
+	// this run access to the same up-to-date CampusGroups photo list.
+	$campusgroups_photos = myignite_get_campusgroups_photos_cached();
 
 	// Pull events that don't yet have a featured image. We query by
 	// post type directly with WP_Query rather than going through any
@@ -153,40 +382,19 @@ function myignite_run_image_sync() {
 		$event_id = $event_post->ID;
 		$processed++;
 
-		// The Events Calendar stores the "Event Website" field in this
-		// post meta key. Confirmed by checking an imported event's
-		// custom fields in wp-admin (classic editor "Event Website" box
-		// writes here).
-		$website_url = get_post_meta( $event_id, '_EventURL', true );
-
-		if ( empty( $website_url ) ) {
-			myignite_sync_log( "Event {$event_id}: skipped — no Event Website URL set." );
-			$skipped++;
-			continue;
+		switch ( myignite_sync_single_event_image( $event_id, $campusgroups_photos ) ) {
+			case 'updated':
+				$updated++;
+				break;
+			case 'error':
+				$errors++;
+				break;
+			default:
+				$skipped++;
+				break;
 		}
 
-		$image_url = myignite_extract_og_image( $website_url, $event_id );
-
-		if ( false === $image_url ) {
-			// myignite_extract_og_image() already logged the specific
-			// reason (no og:image tag, or the fetch itself failed), so
-			// we don't log again here — just count it and move on.
-			$skipped++;
-			// Be polite to CampusGroups' servers between requests.
-			sleep( MYIGNITE_SYNC_REQUEST_DELAY );
-			continue;
-		}
-
-		$result = myignite_set_featured_image_from_url( $event_id, $image_url );
-
-		if ( is_wp_error( $result ) ) {
-			myignite_sync_log( "Event {$event_id}: ERROR — " . $result->get_error_message() );
-			$errors++;
-		} else {
-			myignite_sync_log( "Event {$event_id}: updated featured image from {$image_url}" );
-			$updated++;
-		}
-
+		// Be polite to CampusGroups' servers between events.
 		sleep( MYIGNITE_SYNC_REQUEST_DELAY );
 	}
 
@@ -199,6 +407,28 @@ function myignite_run_image_sync() {
 			$errors
 		)
 	);
+}
+
+/**
+ * Syncs a just-imported/updated event's featured image immediately,
+ * instead of waiting for the next hourly cron tick — the closest thing to
+ * "instant" available without CampusGroups/ReadyEducation supporting
+ * outbound webhooks (they don't expose one we can register against). This
+ * is a normal WordPress action hook, not tied to
+ * MYIGNITE_SYNC_CRON_INTERVAL at all, so it fires correctly no matter how
+ * often the ICS import itself is scheduled to run — once a day, three
+ * times a day, or any other interval.
+ *
+ * Skips events that already have a featured image, so re-imports of an
+ * already-synced (or manually-set) event don't re-run the lookup.
+ */
+add_action( 'tribe_aggregator_after_insert_post', 'myignite_sync_image_on_import', 30, 3 );
+function myignite_sync_image_on_import( $event, $item, $record ) {
+	if ( empty( $event['ID'] ) || has_post_thumbnail( $event['ID'] ) ) {
+		return;
+	}
+
+	myignite_sync_single_event_image( $event['ID'] );
 }
 
 /**
@@ -375,9 +605,13 @@ function myignite_unschedule_image_sync() {
  * request, since the WP_CLI base class wouldn't exist).
  *
  * Available commands:
- *   wp myignite sync-images       — pull og:image from CampusGroups pages
- *                                   and set as featured image for events
- *                                   that don't have one yet.
+ *   wp myignite sync-images       — pull each event's own photo from
+ *                                   CampusGroups (falling back to
+ *                                   og:image scraping) and set it as
+ *                                   featured image for events that don't
+ *                                   have one yet. Runs automatically on
+ *                                   import too — see
+ *                                   myignite_sync_image_on_import().
  *   wp myignite clean-descriptions — one-time cleanup to strip the
  *                                   "--- Event Details: URL" footer that
  *                                   CampusGroups appends to descriptions
@@ -400,14 +634,15 @@ if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	class MyIGNITE_CLI_Commands {
 
 		/**
-		 * Sync event images from CampusGroups source pages.
+		 * Sync event images from CampusGroups.
 		 *
 		 * Finds published events with a CampusGroups URL in the Event Website
-		 * field but no featured image set. Fetches each event's page, extracts
-		 * the og:image URL if present, downloads it, and sets it as the
-		 * WordPress featured image. Events with no og:image (i.e. the
-		 * CampusGroups organizer didn't upload one) are silently skipped —
-		 * this is expected, not an error.
+		 * field but no featured image set. For each, looks up the event's own
+		 * uploaded photo via CampusGroups' events-list API, falling back to
+		 * scraping og:image off the Website URL if that lookup doesn't have
+		 * it. Downloads whichever image was found and sets it as the
+		 * WordPress featured image. Events with no image available anywhere
+		 * are silently skipped — this is expected, not an error.
 		 *
 		 * All activity is logged to wp-content/myignite-image-sync.log.
 		 *
