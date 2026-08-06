@@ -15,6 +15,7 @@
 $postTitle       = get_the_title();
 $postExcerpt     = get_the_excerpt();
 $featuredImageId = get_post_thumbnail_id();
+$focalPoint      = get_post_meta( get_the_ID(), 'focal_point', true );
 $categories      = get_the_category();
 $postAuthor      = get_the_author();
 $postDate        = get_the_date();
@@ -42,6 +43,7 @@ $firstAccentColor    = $firstCategory ? get_term_meta( $firstCategory->term_id, 
 				false,
 				[
 					'class' => 'w-full h-full object-cover',
+					'style' => 'object-position: ' . theme_image_position( $focalPoint ) . ';',
 					'alt'   => '',
 					'role'  => 'presentation',
 				]

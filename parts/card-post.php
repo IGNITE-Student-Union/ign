@@ -7,6 +7,7 @@
  */
 
 $show_tags    = $args['showTags'] ?? true;
+$focal_point  = get_post_meta( get_the_ID(), 'focal_point', true );
 $categories   = get_the_category();
 $accent_class = '';
 if ( ! empty( $categories ) ) {
@@ -25,6 +26,7 @@ if ( ! empty( $categories ) ) {
 					<?php
 					the_post_thumbnail( 'full', [
 						'class' => 'absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300',
+						'style' => 'object-position: ' . theme_image_position( $focal_point ) . ';',
 					] );
 					?>
 				</div>

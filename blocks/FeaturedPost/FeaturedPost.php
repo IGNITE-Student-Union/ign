@@ -30,6 +30,7 @@ if ( ! $post || $post->post_status !== 'publish' ) {
 $postTitle      = get_the_title( $selectedPost );
 $postExcerpt    = get_the_excerpt( $selectedPost );
 $featuredImageId = get_post_thumbnail_id( $selectedPost );
+$focalPoint          = get_post_meta( $selectedPost, 'focal_point', true );
 $categories          = get_the_category( $selectedPost );
 $firstCategory       = ! empty( $categories ) ? $categories[0] : null;
 $categoryAccentColor = $firstCategory ? get_term_meta( $firstCategory->term_id, 'accent_color', true ) : '';
@@ -151,6 +152,7 @@ theme_block_props(
 						false,
 						[
 							'class' => 'w-full h-full object-cover',
+							'style' => 'object-position: ' . theme_image_position( $focalPoint ) . ';',
 						]
 					);
 					?>
