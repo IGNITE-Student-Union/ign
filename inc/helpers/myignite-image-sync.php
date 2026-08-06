@@ -410,26 +410,45 @@ function myignite_run_image_sync() {
 }
 
 /**
- * Syncs a just-imported/updated event's featured image immediately,
- * instead of waiting for the next hourly cron tick — the closest thing to
- * "instant" available without CampusGroups/ReadyEducation supporting
- * outbound webhooks (they don't expose one we can register against). This
- * is a normal WordPress action hook, not tied to
- * MYIGNITE_SYNC_CRON_INTERVAL at all, so it fires correctly no matter how
- * often the ICS import itself is scheduled to run — once a day, three
- * times a day, or any other interval.
+ * Queues a just-imported/updated event's featured image sync to run
+ * moments later via WP-Cron, instead of waiting for the next hourly
+ * batch tick — the closest thing to "instant" available without
+ * CampusGroups/ReadyEducation supporting outbound webhooks (they don't
+ * expose one we can register against).
+ *
+ * Deliberately does NOT call myignite_sync_single_event_image() directly
+ * here. This hook runs inside Event Aggregator's own import request —
+ * confirmed as the cause of a real incident where the ICS import started
+ * running unusually long and silently dropped an event entirely (never
+ * created at all, no error, feed confirmed to have it). Calling the
+ * synchronous image download + thumbnail generation inline, once per
+ * event with no thumbnail, added real seconds to every import run; on a
+ * batch with several such events that was enough to blow past the
+ * import's own execution budget and get the request killed mid-batch —
+ * before it ever reached later events in the feed. wp_schedule_single_event()
+ * only writes a cron entry (near-instant, no HTTP calls), so the import
+ * request finishes exactly as fast as it did before this feature existed.
+ * WP Engine's "Alternate cron" (already required — see the setup notes at
+ * the bottom of this file) picks scheduled events up within about a
+ * minute regardless of how often the ICS import itself runs.
  *
  * Skips events that already have a featured image, so re-imports of an
- * already-synced (or manually-set) event don't re-run the lookup.
+ * already-synced (or manually-set) event don't re-queue anything.
  */
-add_action( 'tribe_aggregator_after_insert_post', 'myignite_sync_image_on_import', 30, 3 );
-function myignite_sync_image_on_import( $event, $item, $record ) {
+add_action( 'tribe_aggregator_after_insert_post', 'myignite_queue_image_sync_on_import', 30, 3 );
+function myignite_queue_image_sync_on_import( $event, $item, $record ) {
 	if ( empty( $event['ID'] ) || has_post_thumbnail( $event['ID'] ) ) {
 		return;
 	}
 
-	myignite_sync_single_event_image( $event['ID'] );
+	if ( ! wp_next_scheduled( 'myignite_sync_one_event_image', array( $event['ID'] ) ) ) {
+		wp_schedule_single_event( time(), 'myignite_sync_one_event_image', array( $event['ID'] ) );
+	}
 }
+
+// The actual (synchronous, potentially slow) sync work runs here instead —
+// on its own separate WP-Cron request, decoupled from the import.
+add_action( 'myignite_sync_one_event_image', 'myignite_sync_single_event_image' );
 
 /**
  * Fetch a CampusGroups event page and pull the og:image URL out of it,
