@@ -88,6 +88,23 @@ function theme_gform_input_to_button( $button, $form ) {
 
 	$label = esc_html( $fragment->get_attribute( 'value' ) );
 
+	// Some forms are configured with no button text, which renders a blank,
+	// unlabeled button. Fall back to an aria-label so it's still announced
+	// to assistive tech without changing the (already blank) visible output.
+	if ( empty( $label ) ) {
+		switch ( current_filter() ) {
+			case 'gform_next_button':
+				$fallback_label = __( 'Next', 'takt' );
+				break;
+			case 'gform_previous_button':
+				$fallback_label = __( 'Previous', 'takt' );
+				break;
+			default:
+				$fallback_label = __( 'Submit', 'takt' );
+		}
+		$new_attributes[] = sprintf( 'aria-label="%s"', esc_attr( $fallback_label ) );
+	}
+
 	return sprintf( '<button %s>%s</button>', implode( ' ', $new_attributes ), $label );
 }
 add_filter( 'gform_next_button', 'theme_gform_input_to_button', 10, 2 );

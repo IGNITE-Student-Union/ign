@@ -585,25 +585,7 @@
 						submenu.querySelectorAll( submenuItemSelector )
 					);
 
-					// Find current focused index within the submenu
-					let currentIndex = -1;
-					currentItems.forEach( ( item, idx ) => {
-						if ( item === document.activeElement ) {
-							currentIndex = idx;
-						}
-					} );
-
 					switch ( e.key ) {
-						case 'ArrowDown':
-							e.preventDefault();
-							currentIndex = ( currentIndex + 1 ) % currentItems.length;
-							currentItems[ currentIndex ]?.focus();
-							break;
-						case 'ArrowUp':
-							e.preventDefault();
-							currentIndex = ( currentIndex - 1 + currentItems.length ) % currentItems.length;
-							currentItems[ currentIndex ]?.focus();
-							break;
 						case 'Home':
 							e.preventDefault();
 							currentItems[ 0 ]?.focus();
@@ -625,9 +607,6 @@
 						case 'Escape':
 							closeSubmenu( button );
 							button.focus();
-							break;
-						case 'Tab':
-							closeSubmenu( button );
 							break;
 					}
 				};

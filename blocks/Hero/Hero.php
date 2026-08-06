@@ -21,6 +21,10 @@ $hasBreadcrumbs  = ! empty( $showBreadcrumbs );
 
 $resolvedImage = theme_resolve_responsive_image( $image ?? [] );
 $hasImage      = ! empty( $resolvedImage['desktop']['id'] );
+
+// The Events Calendar renders its own <h1> for events views. Demote this
+// block's heading to h2 there so the page doesn't ship two h1s.
+$heroHeadingTag = is_post_type_archive( 'tribe_events' ) ? 'h2' : 'h1';
 ?>
 
 <section <?php
@@ -99,7 +103,7 @@ $hasImage      = ! empty( $resolvedImage['desktop']['id'] );
 					'enableEyebrow'    => ! $hasBreadcrumbs,
 					'eyebrow'          => $eyebrow ?? '',
 					'heading'          => $heading ?? '',
-					'headingTag'       => 'h1',
+					'headingTag'       => $heroHeadingTag,
 					'headingSize'      => 0,
 					'headingClassName' => class_name(
 						[
