@@ -1152,33 +1152,8 @@ function myignite_recover_description_linebreaks( $event, $item ) {
 
 	$event['post_content'] = $recovered;
 
-	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-		error_log( 'MYIGNITE DEBUG7 — recovered $event[post_content]: ' . var_export( $recovered, true ) );
-	}
-
 	return $event;
 }
-
-// -----------------------------------------------------------------------
-// TEMPORARY DEBUG (round 7) — round 6 found the real key: $event['post_content']
-// is what Event Aggregator actually saves, not $event['description'] (which
-// nothing downstream reads). myignite_recover_description_linebreaks() now
-// writes the recovered text to 'post_content' instead. This round confirms
-// end-to-end that the fix actually works — that the recovered newlines
-// survive into the real, saved post_content, not just into $event at
-// translate-time. Writes to wp-content/debug.log only, doesn't change any
-// saved data.
-// -----------------------------------------------------------------------
-add_action( 'tribe_aggregator_after_insert_post', function ( $event, $item, $record ) {
-	if ( empty( $event['ID'] ) ) {
-		return;
-	}
-	$post = get_post( $event['ID'] );
-	error_log( "MYIGNITE DEBUG7 — post {$event['ID']} final post_content: " . var_export( $post->post_content ?? 'NOT FOUND', true ) );
-}, 20, 3 );
-// -----------------------------------------------------------------------
-// END TEMPORARY DEBUG (round 7)
-// -----------------------------------------------------------------------
 
 
 /**
