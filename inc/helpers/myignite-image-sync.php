@@ -1,5 +1,44 @@
 <?php
 /**
+ * ============================================================================
+ * PIPELINE RETIRED — 2026-08-08
+ * ============================================================================
+ *
+ * Everything in this file that touched Event Aggregator or ran the hourly
+ * image sync is now DISABLED. MyIGNITE events are imported by a standalone
+ * plugin instead:
+ *
+ *     wp-content/plugins/myignite-event-importer/
+ *     WP-CLI:  wp myignite sync-events [--dry-run] [--since=<date>]
+ *     Log:     wp-content/myignite-event-sync.log
+ *
+ * Why: Event Aggregator's ICS import silently dropped new events pre-insert
+ * (confirmed via debug.log — tribe_aggregator_after_insert_post never fired
+ * for the dropped events, with no skip/duplicate entry explaining why). The
+ * new importer reads CampusGroups' Data Export API directly, matches events
+ * on a stable numeric CampusGroups event ID (_myignite_cg_event_id), and logs
+ * every create/update/skip/error, so a failure can never again be silent.
+ *
+ * WHAT IS STILL LIVE IN THIS FILE (deliberately — do not disable):
+ *   - The "CampusGroups Import" meta box (editable plain-text venue/organizer
+ *     fields). The new importer writes those same two meta keys, so this is
+ *     still the UI for correcting them by hand.
+ *   - The tribe_get_venue_link / tribe_get_organizer_link display filters,
+ *     which render venue/organizer as plain text instead of links.
+ *
+ * WHAT IS DISABLED (each marked "DISABLED" inline, commented not deleted):
+ *   - Hourly image-sync cron + `wp myignite sync-images`
+ *   - All tribe_aggregator_* filters and actions
+ *   - The remaining one-off `wp myignite ...` cleanup commands
+ *
+ * TO ROLL BACK to the ICS pipeline: uncomment the lines marked "DISABLED"
+ * below, deactivate the myignite-event-importer plugin, and re-enable the
+ * ICS import's schedule in wp-admin → Events → Import.
+ *
+ * ============================================================================
+ *
+ * ORIGINAL HEADER (describes the now-disabled behaviour, kept for context):
+ *
  * MyIGNITE — CampusGroups Event Image Sync
  *
  * Problem this solves:
@@ -553,7 +592,11 @@ function myignite_set_featured_image_from_url( $event_id, $image_url ) {
  * already scheduled. wp_next_scheduled() prevents this from stacking up
  * duplicate scheduled events on every page load — it only schedules once.
  */
-add_action( 'init', 'myignite_schedule_image_sync' );
+// DISABLED — superseded by the myignite-event-importer plugin (see the
+// "PIPELINE RETIRED" note at the top of this file). The scheduling hook is
+// commented out rather than deleted so this can be restored by uncommenting
+// these two lines if the new importer ever needs to be rolled back.
+// add_action( 'init', 'myignite_schedule_image_sync' );
 function myignite_schedule_image_sync() {
 	if ( ! wp_next_scheduled( 'myignite_image_sync_event' ) ) {
 		wp_schedule_event( time(), MYIGNITE_SYNC_CRON_INTERVAL, 'myignite_image_sync_event' );
@@ -561,7 +604,25 @@ function myignite_schedule_image_sync() {
 }
 
 // When the scheduled event fires, run the sync.
-add_action( 'myignite_image_sync_event', 'myignite_run_image_sync' );
+// DISABLED — see above.
+// add_action( 'myignite_image_sync_event', 'myignite_run_image_sync' );
+
+/**
+ * Clears the now-orphaned hourly image-sync cron event.
+ *
+ * Commenting out the scheduling hook above stops it being re-registered, but
+ * WordPress keeps firing an already-scheduled event until it is explicitly
+ * unscheduled — so without this, cron would keep calling a hook that no
+ * longer has a listener, forever. Runs on every load but only does work
+ * while a stale schedule still exists, then becomes a no-op.
+ */
+add_action( 'init', 'myignite_clear_retired_image_sync_schedule' );
+function myignite_clear_retired_image_sync_schedule() {
+	$timestamp = wp_next_scheduled( 'myignite_image_sync_event' );
+	if ( $timestamp ) {
+		wp_unschedule_event( $timestamp, 'myignite_image_sync_event' );
+	}
+}
 
 /**
  * Unschedule the cron event if this file is ever removed from the theme
@@ -891,7 +952,15 @@ if ( defined( 'WP_CLI' ) && WP_CLI ) {
 		}
 	}
 
-	WP_CLI::add_command( 'myignite', 'MyIGNITE_CLI_Commands' );
+	// DISABLED — `wp myignite sync-images` pulled images for ICS-imported
+	// events; the myignite-event-importer plugin now sets featured images
+	// itself as part of `wp myignite sync-events`. The other commands here
+	// (clean-descriptions, fix-club-categories, survey-description-whitespace)
+	// were one-time cleanups for ICS-era data and are no longer needed.
+	//
+	// Left registered-but-commented rather than deleted so the whole ICS
+	// pipeline can be restored by uncommenting, per the rollback plan.
+	// WP_CLI::add_command( 'myignite', 'MyIGNITE_CLI_Commands' );
 }
 
 
@@ -976,9 +1045,13 @@ function myignite_correct_club_acronym_name( $name ) {
  * the one that actually fired in testing, since the test event's UID
  * already existed from a prior sync).
  */
-add_filter( 'tribe_aggregator_before_save_event', 'myignite_fix_club_acronym_categories' );
-add_filter( 'tribe_aggregator_before_insert_event', 'myignite_fix_club_acronym_categories' );
-add_filter( 'tribe_aggregator_before_update_event', 'myignite_fix_club_acronym_categories' );
+// DISABLED — Event Aggregator no longer imports MyIGNITE events, so these
+// filters can never fire. The new importer derives its category directly from
+// the CampusGroups group name ("IGNITE Events"), which is already readable, so
+// no acronym correction is needed there.
+// add_filter( 'tribe_aggregator_before_save_event', 'myignite_fix_club_acronym_categories' );
+// add_filter( 'tribe_aggregator_before_insert_event', 'myignite_fix_club_acronym_categories' );
+// add_filter( 'tribe_aggregator_before_update_event', 'myignite_fix_club_acronym_categories' );
 function myignite_fix_club_acronym_categories( $event ) {
 
 	if ( empty( $event['categories'] ) ) {
@@ -1060,13 +1133,17 @@ function myignite_fix_club_acronym_categories( $event ) {
 
 $myignite_ea_is_ics_import = false;
 
-add_action( 'tribe_aggregator_before_insert_posts', 'myignite_flag_ics_import_batch', 10, 2 );
+// DISABLED — see the "PIPELINE RETIRED" note at the top of this file.
+// add_action( 'tribe_aggregator_before_insert_posts', 'myignite_flag_ics_import_batch', 10, 2 );
 function myignite_flag_ics_import_batch( $items, $meta ) {
 	global $myignite_ea_is_ics_import;
 	$myignite_ea_is_ics_import = isset( $meta['origin'] ) && in_array( $meta['origin'], array( 'ics', 'ical' ), true );
 }
 
-add_filter( 'tribe_aggregator_translate_service_data', 'myignite_strip_venue_organizer_for_ics', 10, 2 );
+// DISABLED — the new importer never passes a Venue/Organizer key to
+// tribe_create_event() in the first place, so TEC's auto-create path never
+// runs and there is nothing to strip.
+// add_filter( 'tribe_aggregator_translate_service_data', 'myignite_strip_venue_organizer_for_ics', 10, 2 );
 function myignite_strip_venue_organizer_for_ics( $event, $item ) {
 	global $myignite_ea_is_ics_import;
 
@@ -1084,44 +1161,6 @@ function myignite_strip_venue_organizer_for_ics( $event, $item ) {
 }
 
 /**
- * Recovers paragraph breaks lost from $item->description.
- *
- * Confirmed via debug logging against real test imports: Event Aggregator's
- * "safe" $item->description has already collapsed every line break down to
- * a single space (indistinguishable from normal word spacing) by the time
- * any of our filters see it — regardless of whether the break was typed
- * with Enter or Shift+Enter, and regardless of which MyIGNITE description
- * field was used. $item->unsafe_description, however, still carries the
- * break — as a literal two-character "\n" escape sequence (backslash + n
- * as text), not an actual newline control character. Un-escaping that
- * back into a real newline recovers the paragraph structure entirely.
- *
- * Confirmed via debug logging that $event['post_content'] — not
- * $event['description'] — is the WordPress-native key Event Aggregator
- * actually uses to build the saved post. It's already present, already
- * populated from the lossy $item->description, before this filter ever
- * runs. Writing the recovered text to 'description' had zero effect since
- * nothing downstream reads that key.
- */
-add_filter( 'tribe_aggregator_translate_service_data', 'myignite_recover_description_linebreaks', 10, 2 );
-function myignite_recover_description_linebreaks( $event, $item ) {
-	global $myignite_ea_is_ics_import;
-
-	if ( empty( $myignite_ea_is_ics_import ) || empty( $item->unsafe_description ) ) {
-		return $event;
-	}
-
-	// Literal "\r\n" / "\n" text (backslash followed by the letter, not a
-	// real control character) — un-escape into actual line breaks.
-	$recovered = str_replace( array( '\\r\\n', '\\n' ), array( "\n", "\n" ), $item->unsafe_description );
-
-	$event['post_content'] = $recovered;
-
-	return $event;
-}
-
-
-/**
  * Persists the venue/organizer name(s) as plain-text post meta on the
  * event, once it has a real ID.
  *
@@ -1135,7 +1174,9 @@ function myignite_recover_description_linebreaks( $event, $item ) {
  * $record (3rd arg) is used instead of the global flag since this action
  * gets the actual record object with ->origin directly.
  */
-add_action( 'tribe_aggregator_after_insert_post', 'myignite_save_plain_venue_organizer_names', 10, 3 );
+// DISABLED — the new importer writes _myignite_venue_name and
+// _myignite_organizer_names itself, directly, for every event it touches.
+// add_action( 'tribe_aggregator_after_insert_post', 'myignite_save_plain_venue_organizer_names', 10, 3 );
 function myignite_save_plain_venue_organizer_names( $event, $item, $record ) {
 	if ( empty( $record->origin ) || ! in_array( $record->origin, array( 'ics', 'ical' ), true ) ) {
 		return;
@@ -1193,7 +1234,11 @@ function myignite_save_plain_venue_organizer_names( $event, $item, $record ) {
  * Priority 20 (after myignite_save_plain_venue_organizer_names's default 10)
  * so this always has the final say on venue/organizer meta for locked events.
  */
-add_action( 'tribe_aggregator_after_insert_post', 'myignite_restore_locked_event_content', 20, 3 );
+// DISABLED — the import-lock feature protected events from being overwritten
+// by Aggregator's scheduled ICS runs, which no longer happen. NOTE: the new
+// importer does not yet honour _myignite_lock_from_import; if per-event
+// locking is still wanted, that needs implementing there.
+// add_action( 'tribe_aggregator_after_insert_post', 'myignite_restore_locked_event_content', 20, 3 );
 function myignite_restore_locked_event_content( $event, $item, $record ) {
 	if ( empty( $event['ID'] ) ) {
 		return;
