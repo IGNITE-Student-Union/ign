@@ -3,9 +3,27 @@
 Imports events from MyIGNITE (CampusGroups) into The Events Calendar.
 Replaced the Event Aggregator ICS pipeline on 2026-08-08.
 
-> **This plugin is not in version control.** It exists only on the server. If
-> `wp-content` is rebuilt from a backup or a fresh deploy, this folder must be
-> restored with it or event importing stops silently.
+## Where this code lives, and how to change it
+
+The source of truth is the **`ign` theme repo**, at:
+
+```
+custom-plugins/myignite-event-importer/
+```
+
+It deploys to `wp-content/plugins/myignite-event-importer/` on WP Engine via
+`.github/workflows/deploy.yml`, on every push to `main`.
+
+**To make a change:** edit the files in the repo, commit, and push to `main`.
+The GitHub Action deploys it, the same way theme changes are deployed.
+
+> **Do not edit these files directly on the server over SSH.** The deploy is an
+> rsync with `--delete`, so the repo is authoritative — a server-side edit is
+> silently reverted by the next push, and the change is lost with no record
+> that it ever existed.
+
+`custom-plugins/` is excluded from the theme's own rsync, so this folder is not
+also copied into `wp-content/themes/ign/` (where WordPress would never load it).
 
 ## Settings screen
 
@@ -80,6 +98,10 @@ wp-content/mu-plugins/myignite-secrets.php
 define( 'MYIGNITE_CG_SCHOOL_CODE', '...' );
 define( 'MYIGNITE_CG_API_SECRET',  '...' );
 ```
+
+This file is the **one deliberate exception** to the "edit in the repo, never on
+the server" rule above: it holds live credentials, so it is intentionally kept
+out of version control and off GitHub, and exists only on the server.
 
 If CampusGroups rotates the secret, edit that file over SFTP/SSH and paste the
 new value. Nothing needs changing in the plugin and no redeploy is required.
