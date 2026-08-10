@@ -55,6 +55,19 @@ add_filter( 'gform_field_content', 'theme_set_textarea_rows_for_dynamic_size', 1
  * Filters the next, previous and submit buttons.
  * Replaces the form's <input> buttons with <button> while maintaining attributes from original <input>.
  *
+ * Gravity Forms renders these buttons in two different shapes, and the label
+ * lives in a different place in each:
+ *
+ *   - text buttons  => <input type="submit" value="Submit">   (label in @value)
+ *   - link buttons  => <button ...>{icon} Submit</button>     (label in text)
+ *
+ * The link shape is also what GF falls back to when a form has no saved button
+ * config, because both call sites default to `array( 'type' => 'link' )` --
+ * see GFFormDisplay::gform_footer() and GF_Field_Submit::get_field_input().
+ * Reading only @value therefore produced a completely blank button on the
+ * link shape, on the front end *and* inside the GF form editor (the editor
+ * runs this same filter via GF_Field_Submit::get_field_input()).
+ *
  * @param string $button Contains the <input> tag to be filtered.
  * @param array  $form    Contains all the properties of the current form.
  *
@@ -62,7 +75,17 @@ add_filter( 'gform_field_content', 'theme_set_textarea_rows_for_dynamic_size', 1
  */
 function theme_gform_input_to_button( $button, $form ) {
 	$fragment = \WP_HTML_Processor::create_fragment( $button );
-	$fragment->next_token();
+
+	if ( ! $fragment || ! $fragment->next_token() ) {
+		return $button;
+	}
+
+	// Image buttons carry their label as an image (src/alt), not as text.
+	// Rewriting them to a text <button> would drop the image entirely, so
+	// leave them exactly as Gravity Forms rendered them.
+	if ( 'image' === $fragment->get_attribute( 'type' ) ) {
+		return $button;
+	}
 
 	if ( ! $fragment->has_class( 'gform-theme-button--secondary' ) ) {
 		$button_class = 'btn-primary';
@@ -77,35 +100,45 @@ function theme_gform_input_to_button( $button, $form ) {
 		}
 	}
 
-	$attributes = array( 'id', 'type', 'class', 'onclick' );
+	// `data-submission-type` is how Gravity Forms' submission JS tells submit,
+	// next and previous apart. Dropping it left GF on its class-name fallback
+	// and is the kind of customisation its "unsupported submission flow"
+	// warning is aimed at, so it is carried across.
+	$attributes     = array( 'id', 'type', 'class', 'onclick', 'data-submission-type' );
 	$new_attributes = array();
 	foreach ( $attributes as $attribute ) {
-		$value = $fragment->get_attribute( $attribute );
-		if ( ! empty( $value ) ) {
-			$new_attributes[] = sprintf( '%s="%s"', $attribute, esc_attr( $value ) );
+		$attribute_value = $fragment->get_attribute( $attribute );
+		if ( ! empty( $attribute_value ) ) {
+			$new_attributes[] = sprintf( '%s="%s"', $attribute, esc_attr( $attribute_value ) );
 		}
 	}
 
-	$label = esc_html( $fragment->get_attribute( 'value' ) );
+	// Take the label from wherever GF put it: the @value attribute first, then
+	// the element's own text (which also covers markup another filter already
+	// converted to a <button>). wp_strip_all_tags() drops the leading icon SVG
+	// that GF adds to link-type buttons.
+	$label = trim( (string) $fragment->get_attribute( 'value' ) );
+	if ( '' === $label ) {
+		$label = trim( wp_strip_all_tags( $button ) );
+	}
 
-	// Some forms are configured with no button text, which renders a blank,
-	// unlabeled button. Fall back to an aria-label so it's still announced
-	// to assistive tech without changing the (already blank) visible output.
-	if ( empty( $label ) ) {
+	// Only if the label is genuinely absent, render GF's own default text.
+	// This is a visible label, not an aria-label: a button that reads as
+	// blank on screen is a usability bug, not just an assistive-tech one.
+	if ( '' === $label ) {
 		switch ( current_filter() ) {
 			case 'gform_next_button':
-				$fallback_label = __( 'Next', 'takt' );
+				$label = __( 'Next', 'takt' );
 				break;
 			case 'gform_previous_button':
-				$fallback_label = __( 'Previous', 'takt' );
+				$label = __( 'Previous', 'takt' );
 				break;
 			default:
-				$fallback_label = __( 'Submit', 'takt' );
+				$label = __( 'Submit', 'takt' );
 		}
-		$new_attributes[] = sprintf( 'aria-label="%s"', esc_attr( $fallback_label ) );
 	}
 
-	return sprintf( '<button %s>%s</button>', implode( ' ', $new_attributes ), $label );
+	return sprintf( '<button %s>%s</button>', implode( ' ', $new_attributes ), esc_html( $label ) );
 }
 add_filter( 'gform_next_button', 'theme_gform_input_to_button', 10, 2 );
 add_filter( 'gform_previous_button', 'theme_gform_input_to_button', 10, 2 );
