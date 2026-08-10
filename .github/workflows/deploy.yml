@@ -90,5 +90,48 @@ jobs:
           WPE_SSHG_KEY_PRIVATE: ${{ secrets.WPE_SSHG_KEY_PRIVATE }}
           WPE_ENV: ignitestudentu
           REMOTE_PATH: "wp-content/themes/ign/"
-          FLAGS: -azvr --inplace --delete --exclude=.git --exclude=node_modules --exclude=.env
+          # custom-plugins/ is excluded here because it is NOT part of the
+          # theme - it is deployed to wp-content/plugins/ by the job below.
+          # Without this exclude it would also be copied into the theme
+          # folder, where it would sit unused (WordPress does not load
+          # plugins from inside a theme).
+          FLAGS: -azvr --inplace --delete --exclude=.git --exclude=node_modules --exclude=.env --exclude=custom-plugins
+          CACHE_CLEAR: TRUE
+
+  # ---------------------------------------------------------------------
+  # Custom plugins we author live in custom-plugins/<plugin>/ in this repo
+  # and deploy to wp-content/plugins/<plugin>/ on the server.
+  #
+  # Only plugins we wrote are deployed this way. WordPress core and
+  # third-party plugins are deliberately NOT in this repo: WP Engine and
+  # WordPress update those themselves, and versioning them here would mean
+  # fighting those updates on every release.
+  #
+  # Like the theme deploy above, this is an incremental rsync - unchanged
+  # files are not transferred, and --delete only removes files that no
+  # longer exist in the repo, so the server stays an exact mirror of
+  # custom-plugins/myignite-event-importer/.
+  # ---------------------------------------------------------------------
+  deploy-plugin-myignite-importer:
+    name: Deploy → MyIGNITE Event Importer plugin
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment:
+      name: production
+      url: https://ignitestudentu.wpengine.com
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: built-theme
+
+      - name: Deploy plugin to WPEngine Production
+        uses: wpengine/github-action-wpe-site-deploy@v3
+        with:
+          WPE_SSHG_KEY_PRIVATE: ${{ secrets.WPE_SSHG_KEY_PRIVATE }}
+          WPE_ENV: ignitestudentu
+          SRC_PATH: "custom-plugins/myignite-event-importer/"
+          REMOTE_PATH: "wp-content/plugins/myignite-event-importer/"
+          FLAGS: -azvr --inplace --delete --exclude=.git
           CACHE_CLEAR: TRUE
