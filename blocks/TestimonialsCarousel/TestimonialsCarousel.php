@@ -43,7 +43,7 @@ if ( $postsSource === 'manual' && ! empty( $selectedPosts ) ) {
 
 <?php if ( empty( $hideIfEmpty ) || $has_posts ) : ?>
 	<section <?php theme_block_props( 'testimonials-carousel dark bg-transparent!', empty( $heading ) ? 'aria-label="' . esc_attr__( 'Testimonials Carousel', 'takt' ) . '"' : '' ); ?>>
-		<div class="container relative py-6 sm:py-16 before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)">
+		<div class="container relative py-6 sm:py-16 dark-surface before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)">
 			<div data-animate="fade-up">
 			<?php
 			get_template_part( 'parts/ThemeHeading', null, [

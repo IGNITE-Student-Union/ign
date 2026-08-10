@@ -35,7 +35,7 @@ export default function Edit({ attributes, setAttributes }: EditProps) {
 	return (
 		<div
 			{...useBlockProps({
-				className: "bg-charcoal rounded-3xl py-4 text-white not-discourse"
+				className: "dark-surface bg-charcoal rounded-3xl py-4 text-white not-discourse"
 			})}
 		>
 			<div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">

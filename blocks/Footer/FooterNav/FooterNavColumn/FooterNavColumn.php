@@ -19,7 +19,7 @@ $heading_id = theme_block_region_id();
 <?php // aria-labelledby is suppressed on this wrapper div: a generic <div> with no
 // role can't legally carry aria-labelledby (axe aria-prohibited-attr). The inner
 // <ul> below carries it instead, which is valid since UL has implicit list role. ?>
-<div <?php theme_block_props( 'flex flex-col gap-4 overflow-hidden', [ 'aria-labelledby' => false ] ); ?>>
+<div <?php theme_block_props( 'flex flex-col gap-4 min-w-0 break-words', [ 'aria-labelledby' => false ] ); ?>>
 	<?php if ( ! empty( $heading ) ) : ?>
 		<h3 id="<?php echo esc_attr( $heading_id ); ?>" class="font-heading text-base leading-[1.1] tracking-[0.02em]"><?php echo esc_html( $heading ); ?></h3>
 	<?php endif; ?>

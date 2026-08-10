@@ -106,6 +106,24 @@ textarea {
 	items-start;
 }
 
+/* Keyboard focus ring for form controls.
+   The `focus:outline-none` in the rules above is unlayered, so it also beat
+   the global `@layer base` ring — which left keyboard users with nothing but
+   `focus:border-accent`, a 1px colour change that is close to invisible
+   against the off-white page. Mouse/tap focus is untouched. This is
+   deliberately specific enough to also win over Gravity Forms' own
+   `--gf-ctrl-outline-style: none`. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not(
+		[type="submit"]
+	):not([type="reset"]):not([type="button"]):not([type="image"]):not([type="range"]):not(
+		[type="color"]
+	):focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+	outline: 2px dotted var(--focus-ring-color);
+	outline-offset: 2px;
+}
+
 /* Hide search clear buttons */
 input[type="search"]::-webkit-search-cancel-button,
 input[type="search"]::-webkit-search-clear-button,

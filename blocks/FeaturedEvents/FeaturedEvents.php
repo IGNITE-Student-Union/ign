@@ -126,7 +126,8 @@ if ( $postsSource === 'manual' && ! empty( $selectedPosts ) ) {
 					?>
 
 					<?php if ( ! empty( $remaining_events ) ) : ?>
-						<div class="relative p-4 md:p-8 flex flex-col divide-y divide-white/20 before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:-inset-y-4 md:before:inset-y-0 md:before:-inset-x-(--bg-extend)">
+						<?php // `dark-surface`: white focus ring for the rows, since the charcoal default is invisible here. ?>
+						<div class="dark-surface relative p-4 md:p-8 flex flex-col divide-y divide-white/20 before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:-inset-y-4 md:before:inset-y-0 md:before:-inset-x-(--bg-extend)">
 							<?php foreach ( $remaining_events as $event ) : ?>
 								<?php
 								$post = $event;

@@ -42,7 +42,10 @@ if ( $start_date ) {
 ?>
 
 <div data-animate="fade-up" class="<?php echo class_name( [ 'md:col-span-2' => $is_full_width ] ); ?>">
-	<a href="<?php echo esc_url( $permalink ); ?>" <?php echo $website ? 'target="_blank" rel="noopener noreferrer"' : ''; ?> class="relative flex flex-col gap-6 p-4 md:p-8 text-white group no-underline! w-full before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:-inset-y-4 md:before:inset-y-0 md:before:-inset-x-(--bg-extend)">
+	<?php // `dark-surface` switches the focus ring to white (the charcoal default is invisible
+	// on this card); the negative outline offset keeps the ring inside the anchor box, since on
+	// md+ the charcoal pseudo-element ends exactly at the anchor's top and bottom edges. ?>
+	<a href="<?php echo esc_url( $permalink ); ?>" <?php echo $website ? 'target="_blank" rel="noopener noreferrer"' : ''; ?> class="dark-surface relative flex flex-col gap-6 p-4 md:p-8 text-white group no-underline! w-full focus-visible:-outline-offset-2 before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:-inset-y-4 md:before:inset-y-0 md:before:-inset-x-(--bg-extend)">
 		<?php /* Image */ ?>
 		<div class="relative flex flex-col items-end w-full overflow-hidden rounded-xl p-2 aspect-[4/3]">
 			<?php if ( has_post_thumbnail() ) : ?>

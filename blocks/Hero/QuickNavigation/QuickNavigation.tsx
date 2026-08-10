@@ -98,7 +98,7 @@ export default function Edit({ attributes, setAttributes }: EditProps) {
 			<div
 				{...useBlockProps({
 					className:
-						"quick-navigation dark bg-charcoal rounded-[32px] p-8 flex flex-col sm:flex-row sm:items-center gap-x-12 gap-y-6 relative overflow-hidden not-discourse"
+						"quick-navigation dark-surface dark bg-charcoal rounded-[32px] p-8 flex flex-col sm:flex-row sm:items-center gap-x-12 gap-y-6 relative overflow-hidden not-discourse"
 				})}
 			>
 				{/* Title */}

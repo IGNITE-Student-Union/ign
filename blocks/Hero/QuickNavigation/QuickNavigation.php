@@ -18,7 +18,7 @@ $select_id         = esc_attr( $takt_current_block_id ) . '-select';
 $dropdown_behavior = $dropdownBehavior;
 $placeholder_text  = $placeholder;
 ?>
-<div <?php theme_block_props( 'quick-navigation dark bg-charcoal rounded-[32px] p-8 flex flex-col sm:flex-row sm:items-center gap-x-12 gap-y-6 relative overflow-hidden' ); ?>>
+<div <?php theme_block_props( 'quick-navigation dark-surface dark bg-charcoal rounded-[32px] p-8 flex flex-col sm:flex-row sm:items-center gap-x-12 gap-y-6 relative overflow-hidden' ); ?>>
 
 	<?php // Title. ?>
 	<?php if ( ! empty( $title ) ) : ?>

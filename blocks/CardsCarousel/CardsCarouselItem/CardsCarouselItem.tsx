@@ -59,7 +59,7 @@ export default function Edit({ attributes, setAttributes, clientId, context }: E
 					})
 				})}
 			>
-				<div className="w-full h-full bg-accent rounded-2xl p-6 md:p-8 flex flex-col">
+				<div className="light-surface w-full h-full bg-accent rounded-2xl p-6 md:p-8 flex flex-col">
 					{/* Title */}
 					{(displayContent || attributes.title) && (
 						<RichText

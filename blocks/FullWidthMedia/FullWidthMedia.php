@@ -50,7 +50,7 @@ $hasMedia = $mediaType === 'image' ? $hasImageMedia : ( $hasVideo || ! empty( $p
 	  <div class="w-full" data-animate="scale-in" data-animate-delay="150">
 		<?php if ( $mediaType === 'image' ) : ?>
 			<?php if ( ! empty( $image['id'] ) ) : ?>
-			<div class="relative before:absolute before:-inset-[18px] sm:before:-inset-(--bg-extend) before:bg-charcoal before:rounded-3xl before:pointer-events-none">
+			<div class="dark-surface relative before:absolute before:-inset-[18px] sm:before:-inset-(--bg-extend) before:bg-charcoal before:rounded-3xl before:pointer-events-none">
 				<div class="w-full h-[294px] sm:h-[600px] default-mask overflow-hidden relative z-1">
 					<?php
 					echo wp_get_attachment_image(
@@ -68,7 +68,7 @@ $hasMedia = $mediaType === 'image' ? $hasImageMedia : ( $hasVideo || ! empty( $p
 		  <?php endif; ?>
 
 		<?php elseif ( $mediaType === 'video' ) : ?>
-		  <div class="relative before:absolute before:-inset-[18px] sm:before:-inset-(--bg-extend) before:bg-charcoal before:rounded-3xl before:pointer-events-none">
+		  <div class="dark-surface relative before:absolute before:-inset-[18px] sm:before:-inset-(--bg-extend) before:bg-charcoal before:rounded-3xl before:pointer-events-none">
 		  <div class="full-width-media-video-container relative w-full aspect-video grid grid-cols-1 default-mask overflow-hidden z-1">
 
 			<?php if ( ! empty( $posterImage['id'] ) ) : ?>

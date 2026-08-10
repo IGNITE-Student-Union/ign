@@ -32,7 +32,7 @@ export default function Edit({ attributes, setAttributes, clientId }: EditProps)
 	return (
 		<div
 			{...useBlockProps({
-				className: "flex flex-col gap-4 overflow-hidden not-discourse"
+				className: "flex flex-col gap-4 min-w-0 break-words not-discourse"
 			})}
 		>
 			<RichText

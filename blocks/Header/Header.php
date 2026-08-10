@@ -44,7 +44,7 @@ $hasChildren      = ! empty( $children );
 			<a
 				href="<?php echo esc_url( $sepLink['url'] ); ?>"
 				<?php if ( ! empty( $sepLink['opensInNewTab'] ) ) : ?>target="_blank" rel="noopener noreferrer"<?php endif; ?>
-				class="md:hidden relative z-100 flex items-center justify-center gap-3 text-white py-4 mt-[calc(var(--side-gutter)/2)] no-underline! font-sans font-medium text-base leading-[1.16] transition-colors hover:text-neon-green focus-visible:text-neon-green focus-visible:outline-dotted focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2 before:absolute before:bg-charcoal before:rounded-full before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 before:border before:border-charcoal md:before:-inset-x-(--bg-extend)"
+				class="md:hidden relative z-100 flex items-center justify-center gap-3 text-white py-4 mt-[calc(var(--side-gutter)/2)] no-underline! font-sans font-medium text-base leading-[1.16] transition-colors hover:text-neon-green focus-visible:text-neon-green focus-visible:outline-dotted focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2 dark-surface before:absolute before:bg-charcoal before:rounded-full before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 before:border before:border-charcoal md:before:-inset-x-(--bg-extend)"
 			>
 				<span><?php echo esc_html( $sepLink['title'] ); ?></span>
 				<span class="w-3 h-3 shrink-0"><?php theme_block_asset( 'ExternalArrow.svg' ); ?></span>
@@ -53,7 +53,7 @@ $hasChildren      = ! empty( $children );
 
 		<?php // Nav Bar ?>
 		<div class="<?php echo class_name( [
-			'header-main absolute left-0 right-0 z-200 rounded-[25px] py-4 w-full mt-2 md:mt-4 lg:mt-8 mb-2 md:mb-4 lg:mb-8 [&.scrolling]:mt-0 [&.scrolling]:mb-0 [&.scrolling.scroll-animate]:transition-[translate,opacity] [&.scrolling.scroll-animate]:duration-300 before:absolute before:bg-charcoal before:rounded-[25px] before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)' => true,
+			'header-main absolute left-0 right-0 z-200 rounded-[25px] py-4 w-full mt-2 md:mt-4 lg:mt-8 mb-2 md:mb-4 lg:mb-8 [&.scrolling]:mt-0 [&.scrolling]:mb-0 [&.scrolling.scroll-animate]:transition-[translate,opacity] [&.scrolling.scroll-animate]:duration-300 dark-surface before:absolute before:bg-charcoal before:rounded-[25px] before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)' => true,
 			'md:z-200 md:[&.scrolling]:fixed md:[&.scrolling]:top-(--fixed-offset) md:[&.scrolling]:inset-x-0 md:[&.scrolling]:mx-auto md:[&.scrolling]:w-(--max-container)' => $fixedOnScrollDesktop && ! $hideOnScrollDownDesktop,
 			'md:z-200 md:[&.scrolling:is(.scrolling-down,.scrolling-up)]:fixed md:[&.scrolling:is(.scrolling-down,.scrolling-up)]:top-(--fixed-offset) md:[&.scrolling:is(.scrolling-down,.scrolling-up)]:inset-x-0 md:[&.scrolling:is(.scrolling-down,.scrolling-up)]:mx-auto md:[&.scrolling:is(.scrolling-down,.scrolling-up)]:w-(--max-container)' => $fixedOnScrollDesktop && $hideOnScrollDownDesktop,
 			'md:[&.scrolling.scrolling-down:not(.scrolling-up)]:translate-y-[calc(-100%-var(--fixed-offset))]' => $hideOnScrollDownDesktop,

@@ -39,7 +39,7 @@ theme_block_props(
 );
 ?>
 >
-	<div class="<?php echo class_name( [ 'container' => true, 'relative py-6 sm:py-16 before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)' => $darkMode ] ); ?>">
+	<div class="<?php echo class_name( [ 'container' => true, 'relative py-6 sm:py-16 dark-surface before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)' => $darkMode ] ); ?>">
 		<?php // Header - two columns using ThemeHeading ?>
 		<?php if ( $hasHeader ) : ?>
 			<div data-animate="fade-up">

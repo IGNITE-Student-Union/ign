@@ -229,7 +229,7 @@ $query = new WP_Query( $args );
 	data-dark-mode="<?php echo esc_attr( $darkMode ? '1' : '0' ); ?>"
 	data-preset-filters="<?php echo esc_attr( wp_json_encode( (object) $preset_filters ) ); ?>"
 >
-	<div class="<?php echo class_name( [ 'container grid grid-cols-1 gap-16' => true, 'relative py-6 sm:py-16 before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)' => $darkMode ] ); ?>">
+	<div class="<?php echo class_name( [ 'container grid grid-cols-1 gap-16' => true, 'relative py-6 sm:py-16 dark-surface before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)' => $darkMode ] ); ?>">
 			<?php
 			get_template_part( 'parts/ThemeHeading', null, [
 				'eyebrow'          => $eyebrow ?? '',

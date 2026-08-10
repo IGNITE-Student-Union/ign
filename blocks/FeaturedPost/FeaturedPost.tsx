@@ -166,7 +166,7 @@ export default function Edit({ attributes, setAttributes, clientId }: EditProps)
 				<div
 					className={cn({
 						"container grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-10 sm:gap-y-16 items-stretch": true,
-						"relative py-6 sm:py-16 gap-y-8! before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)":
+						"relative py-6 sm:py-16 gap-y-8! dark-surface before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)":
 							attributes.darkMode
 					})}
 				>

@@ -38,7 +38,7 @@ if ( $video_source === 'file' && ! empty( $video_file ) ) {
 <?php else : ?>
 <div class="h-full">
 <?php endif; ?>
-	<div class="flex flex-col h-full bg-accent rounded-3xl p-6">
+	<div class="light-surface flex flex-col h-full bg-accent rounded-3xl p-6">
 		<div class="flex flex-col gap-6 pb-8 flex-1">
 			<?php if ( ! empty( $testimonial_name ) ) : ?>
 				<h3 class="font-heading text-[1.5rem] md:text-[2.5rem] leading-[1.1] text-charcoal"><?php echo esc_html( $testimonial_name ); ?></h3>

@@ -24,7 +24,8 @@
 		}
 		?>
 
-		<div class="footer-section-animate relative before:absolute before:bg-charcoal before:rounded-[32px] before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)" style="transition-delay: 450ms">
+		<?php // `dark-surface`: white focus ring for the nav and credits links inside the charcoal card. ?>
+		<div class="dark-surface footer-section-animate relative before:absolute before:bg-charcoal before:rounded-[32px] before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)" style="transition-delay: 450ms">
 			<?php
 			foreach ( $block->inner_blocks as $inner_block ) {
 				if ( 'takt/footer-nav' === $inner_block->name || 'takt/footer-credits' === $inner_block->name ) {

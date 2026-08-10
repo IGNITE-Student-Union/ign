@@ -52,7 +52,7 @@ theme_block_props(
 		<?php endif; ?>
 
 		<?php // Content wrapper - colored background with padding ?>
-		<div class="bg-accent rounded-[25px] p-6 flex flex-col flex-1">
+		<div class="light-surface bg-accent rounded-[25px] p-6 flex flex-col flex-1">
 			<?php // Title ?>
 			<?php if ( ! empty( $title ) ) : ?>
 				<h3 class="text-header-5 text-charcoal mb-4">

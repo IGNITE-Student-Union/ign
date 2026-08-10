@@ -362,7 +362,7 @@ export default function Edit({ attributes, setAttributes, clientId }: EditProps)
 					<div
 						className={cn({
 							"flex flex-col justify-center gap-8": true,
-							"relative py-6 md:py-8 before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)":
+							"relative py-6 md:py-8 dark-surface before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)":
 								attributes.darkMode,
 							"md:col-start-1": attributes.isReversed,
 							"md:col-start-2": !attributes.isReversed
@@ -386,7 +386,7 @@ export default function Edit({ attributes, setAttributes, clientId }: EditProps)
 						<div
 							className={cn({
 								"-order-1": !attributes.reverseRows,
-								"relative py-6 md:py-8 before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)":
+								"relative py-6 md:py-8 dark-surface before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)":
 									attributes.darkMode,
 								"md:order-none md:row-start-1": true,
 								"md:col-start-1": !attributes.isReversed,

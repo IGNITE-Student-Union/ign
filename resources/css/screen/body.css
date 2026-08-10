@@ -41,8 +41,12 @@ html {
 }
 
 @layer base {
+	/* Stays in `@layer base` so per-element `focus-visible:outline-*` utilities
+	   can still override it. `--focus-ring-color` is charcoal by default and is
+	   flipped to white on dark surfaces (see colors.css). */
 	*:focus-visible {
-		@apply outline-2 outline-black outline-dotted outline-offset-1;
+		outline: 2px dotted var(--focus-ring-color);
+		outline-offset: 1px;
 	}
 }
 

@@ -93,7 +93,7 @@ export default function Edit({ attributes, setAttributes, clientId, context }: E
 					)}
 
 					{/* Content wrapper - colored background with padding */}
-					<div className="bg-accent rounded-[25px] p-6 flex flex-col flex-1">
+					<div className="light-surface bg-accent rounded-[25px] p-6 flex flex-col flex-1">
 						{/* Title */}
 						{(displayContent || attributes.title) && (
 							<RichText

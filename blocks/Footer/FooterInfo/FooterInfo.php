@@ -26,7 +26,7 @@ foreach ( $addresses as $addr ) {
 }
 ?>
 
-<section <?php theme_block_props( 'relative py-8 text-white [&_a]:underline [&_a]:text-white [&_a]:hover:no-underline! [&_a]:hover:text-neon-green [&_a]:transition-colors before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)' ); ?>>
+<section <?php theme_block_props( 'dark-surface relative py-8 text-white [&_a]:underline [&_a]:text-white [&_a]:hover:no-underline! [&_a]:hover:text-neon-green [&_a]:transition-colors before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)' ); ?>>
 	<?php // Sr-only h2 wrapper so the FooterInfo column h3s (Address / Hours / Contact /
 	// Follow Us) sit at h3 under an h2, not directly under the page h1. Pages where
 	// the main content has no <h2> (eg /event/ detail, /404) were tripping axe's

@@ -230,7 +230,7 @@ export default function Edit({ attributes, setAttributes, clientId }: EditProps)
 						<div className="w-full">
 							{/* Image */}
 							{attributes.mediaType === "image" && (
-								<div className="relative before:absolute before:-inset-[18px] sm:before:-inset-(--bg-extend) before:bg-charcoal before:rounded-3xl before:pointer-events-none">
+								<div className="dark-surface relative before:absolute before:-inset-[18px] sm:before:-inset-(--bg-extend) before:bg-charcoal before:rounded-3xl before:pointer-events-none">
 									<div className="w-full h-[294px] sm:h-[600px] default-mask overflow-hidden relative z-1">
 										<ImageDropUploader
 											image={attributes.image}
@@ -245,7 +245,7 @@ export default function Edit({ attributes, setAttributes, clientId }: EditProps)
 
 							{/* Video */}
 							{attributes.mediaType === "video" && (
-								<div className="relative before:absolute before:-inset-[18px] sm:before:-inset-(--bg-extend) before:bg-charcoal before:rounded-3xl before:pointer-events-none">
+								<div className="dark-surface relative before:absolute before:-inset-[18px] sm:before:-inset-(--bg-extend) before:bg-charcoal before:rounded-3xl before:pointer-events-none">
 									<div
 										ref={videoRef}
 										key={mediaRenderId}

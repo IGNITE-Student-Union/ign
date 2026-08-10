@@ -65,7 +65,7 @@ echo class_name(
 	echo class_name(
 		[
 			'flex flex-col' => true,
-			'relative py-6 md:py-8 before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)' => $darkMode,
+			'relative py-6 md:py-8 dark-surface before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)' => $darkMode,
 			'md:col-start-1' => $isReversed,
 			'md:col-start-2' => ! $isReversed,
 		]
@@ -100,7 +100,7 @@ echo class_name(
 		echo class_name(
 			[
 				'-order-1' => ! $reverseRows,
-				'relative py-6 md:py-8 before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)' => $darkMode,
+				'relative py-6 md:py-8 dark-surface before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)' => $darkMode,
 				'flex items-center md:order-none md:row-start-1' => true,
 				'md:col-start-1' => ! $isReversed,
 				'md:col-start-2' => $isReversed,

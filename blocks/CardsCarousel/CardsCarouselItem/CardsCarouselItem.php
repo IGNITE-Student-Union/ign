@@ -27,7 +27,7 @@ theme_block_props(
 );
 ?>
 >
-	<div class="w-full h-full bg-accent rounded-2xl p-6 md:p-8 flex flex-col">
+	<div class="light-surface w-full h-full bg-accent rounded-2xl p-6 md:p-8 flex flex-col">
 		<?php // Title ?>
 		<?php if ( ! empty( $title ) ) : ?>
 			<h3 class="text-header-5 text-charcoal mb-4">

@@ -3,7 +3,7 @@ $hasInnerBlocks = ! empty( $children );
 ?>
 
 <section <?php theme_block_props( 'gallery-carousel dark bg-transparent!', empty( $heading ) ? 'aria-label="' . esc_attr__( 'Gallery Carousel', 'takt' ) . '"' : '' ); ?>>
-	<div class="container relative py-6 sm:py-16 before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)">
+	<div class="container relative py-6 sm:py-16 dark-surface before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)">
 		<?php // Noise texture overlay (decorative SVG; alt="" + no accessible name = AT ignores) ?>
 		<div class="absolute inset-x-(--side-gutter) md:inset-x-(--bg-extend) inset-y-0 pointer-events-none rounded-3xl overflow-hidden">
 			<svg class="hidden">

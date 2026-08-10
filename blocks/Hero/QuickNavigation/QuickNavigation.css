@@ -23,9 +23,20 @@
 	color: var(--color-white);
 }
 
+/* Mouse/tap focus stays clean, but keyboard focus must still show a ring:
+   the `outline: none` above used to apply to `:focus` as well, which left
+   keyboard users with nothing but a 1px border-bottom colour change. */
 .quick-navigation select:focus {
 	border-color: var(--color-white);
+}
+
+.quick-navigation select:focus:not(:focus-visible) {
 	outline: none;
+}
+
+.quick-navigation select:focus-visible {
+	outline: 2px dotted var(--focus-ring-color);
+	outline-offset: 2px;
 }
 
 /* Button inside the select (custom trigger) */

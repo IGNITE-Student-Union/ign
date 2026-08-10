@@ -75,7 +75,7 @@ export default function Edit({ attributes, setAttributes }: EditProps) {
 			<section
 				{...useBlockProps({
 					className:
-						"relative py-8 text-white not-discourse before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)"
+						"dark-surface relative py-8 text-white not-discourse before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)"
 				})}
 			>
 				{/* Logo area */}

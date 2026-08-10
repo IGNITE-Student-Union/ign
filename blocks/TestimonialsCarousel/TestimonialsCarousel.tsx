@@ -237,7 +237,7 @@ export default function Edit({ attributes, setAttributes, clientId }: EditProps)
 					})
 				})}
 			>
-				<div className="container relative py-6 sm:py-16 before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)">
+				<div className="container relative py-6 sm:py-16 dark-surface before:absolute before:bg-charcoal before:rounded-3xl before:-z-1 before:-inset-x-[calc(var(--side-gutter)/2)] before:inset-y-0 md:before:-inset-x-(--bg-extend)">
 					{/* Header - two columns using ThemeHeading */}
 					<ThemeHeading
 						className="mb-16"

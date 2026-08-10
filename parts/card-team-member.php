@@ -42,7 +42,7 @@ $has_bio   = ! empty( $bio );
 			</div>
 		<?php endif; ?>
 
-		<div class="flex flex-1 flex-col gap-3 p-4 md:gap-6 md:p-6 rounded-3xl overflow-hidden bg-accent">
+		<div class="light-surface flex flex-1 flex-col gap-3 p-4 md:gap-6 md:p-6 rounded-3xl overflow-hidden bg-accent">
 			<?php if ( $show_tags && ! empty( $departments ) && ! is_wp_error( $departments ) ) : ?>
 				<span class="inline-block bg-white/80 border border-accent text-charcoal text-body-small uppercase font-medium tracking-wider px-2 py-1.5 rounded-full w-fit">
 					<?php echo esc_html( $departments[0]->name ); ?>

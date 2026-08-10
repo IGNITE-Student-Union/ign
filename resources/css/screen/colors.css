@@ -33,6 +33,12 @@
 	--accent-color: rgba(212, 255, 69, 1);
 	--accent-color-light: rgba(221, 255, 106, 1);
 	--accent-color-lighter: rgba(238, 255, 181, 1);
+
+	/* Focus ring colour, consumed by the global `*:focus-visible` rule in
+	   body.css. Charcoal reads against the off-white page background and the
+	   accent-coloured cards; charcoal surfaces flip it to white via
+	   `.dark-surface` (see below). */
+	--focus-ring-color: var(--color-charcoal);
 }
 
 /* Accent color utilities - defined outside @theme for runtime evaluation */
@@ -125,6 +131,29 @@ body {
 .dark {
 	@apply text-white
 	bg-black;
+}
+
+/* ─── Focus ring surfaces ─────────────────────────────────────────
+   The focus ring has to contrast with whatever is *behind* it, and no single
+   colour clears 3:1 against both charcoal and the accent palette. So the ring
+   colour is a custom property that each surface sets, and inheritance carries
+   it down to every focusable descendant.
+
+   `.dark-surface` — put it on the element that actually paints charcoal
+   (normally the one carrying `before:bg-charcoal`). Without it the ring is
+   charcoal-on-charcoal, i.e. no visible focus indicator at all.
+
+   `.light-surface` — put it on light cards (`bg-accent`, `bg-off-white`) that
+   sit *inside* a dark surface, so their own focusable children get the
+   charcoal ring back instead of inheriting white.
+
+   Nest them as deep as the design needs; the innermost one wins. */
+.dark-surface {
+	--focus-ring-color: var(--color-white);
+}
+
+.light-surface {
+	--focus-ring-color: var(--color-charcoal);
 }
 
 @utility bg-dark-pattern {
