@@ -1,7 +1,7 @@
 /* Gradient moved to a ::before pseudo so it can be animated independently:
    it scales up from the bottom (transform-origin: bottom) when the footer
    enters view. The footer itself stays transparent. */
-footer.footer::before {
+.footer::before {
 	content: "";
 	position: absolute;
 	inset: 0;
@@ -20,14 +20,22 @@ footer.footer::before {
 		radial-gradient(ellipse 44% 33% at 80% 60%, var(--gradient-right), transparent);
 }
 
-footer.footer.is-in-view::before {
+.footer.is-in-view::before {
 	transform: scaleY(1);
 }
 
 /* Section fade-in-up — staggered. Keyed off the footer's .is-in-view class
    so all three sections start animating together once the footer is observed
-   entering the viewport (regardless of how much of it reaches the trigger). */
-footer.footer .footer-section-animate {
+   entering the viewport (regardless of how much of it reaches the trigger).
+
+   The hidden start state is gated behind .animate-ready, which Footer.js adds
+   at runtime. Without that gate, a footer whose JS never executes (bundle
+   error, blocked script, JS off) would keep `opacity: 0` forever and the
+   whole footer — nav, contact details, Privacy Policy and Accessibility
+   links — would be permanently invisible. No JS now means no animation and
+   no hiding: the footer just renders as-is. The gradient above needs no gate
+   because it starts at scaleY(0), which is simply the un-gradiented look. */
+.footer.animate-ready .footer-section-animate {
 	opacity: 0;
 	transform: translateY(40px);
 	transition:
@@ -35,17 +43,17 @@ footer.footer .footer-section-animate {
 		transform 450ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
-footer.footer.is-in-view .footer-section-animate {
+.footer.animate-ready.is-in-view .footer-section-animate {
 	opacity: 1;
 	transform: translateY(0);
 }
 
 @media (prefers-reduced-motion: reduce) {
-	footer.footer::before {
+	.footer::before {
 		transform: none;
 		transition: none;
 	}
-	footer.footer .footer-section-animate {
+	.footer.animate-ready .footer-section-animate {
 		opacity: 1;
 		transform: none;
 		transition: none;

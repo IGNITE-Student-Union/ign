@@ -16,7 +16,7 @@
  */
 
 document.addEventListener("DOMContentLoaded", () => {
-	const footers = document.querySelectorAll("footer.footer");
+	const footers = document.querySelectorAll(".footer");
 	if (!footers.length) return;
 
 	const observer = new IntersectionObserver(
@@ -34,5 +34,11 @@ document.addEventListener("DOMContentLoaded", () => {
 		}
 	);
 
-	footers.forEach((footer) => observer.observe(footer));
+	footers.forEach((footer) => {
+		// Opt into the hidden start state only now that JS is confirmed to be
+		// running. The CSS keys `opacity: 0` off this class, so if this file
+		// never executes the footer stays visible instead of disappearing.
+		footer.classList.add("animate-ready");
+		observer.observe(footer);
+	});
 });
