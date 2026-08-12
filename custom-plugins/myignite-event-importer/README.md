@@ -33,8 +33,10 @@ also copied into `wp-content/themes/ign/` (where WordPress would never load it).
 
 Tick the CampusGroups groups whose events should appear on the website, then
 click **Save settings**. Unticking a group stops its events being imported or
-updated from the next run onward — events already on the website are left in
-place, not deleted.
+updated from the next run onward. Events from that group already on the website
+stay published and are simply no longer managed — see
+[What happens to an event already on the website](#what-happens-to-an-event-already-on-the-website)
+for the full removal policy.
 
 **Check for other groups** asks CampusGroups for groups that are not already in
 your list and shows them as extra checkboxes. Tick any you want and click
@@ -171,9 +173,32 @@ If an event should appear on the website but does not, check that setting first;
 it is the usual cause. Changing it on CampusGroups is enough — the next run
 picks the event up, image included, with no code change.
 
-An event that already exists on the website and later stops meeting any of these
-rules is moved to **Trash** (not deleted), and the log records which specific
-rule removed it.
+### What happens to an event already on the website
+
+The importer draws a hard line between *"CampusGroups says this event is gone"*
+and *"we chose not to manage this event"*. Only the first one removes anything.
+
+| Change | Effect on the existing post |
+|---|---|
+| Deleted on CampusGroups | → **Trash** |
+| Moved back to draft on CampusGroups | → **Trash** |
+| Approval revoked on CampusGroups | → **Trash** |
+| Its group is unticked in settings | **left published**, no longer updated |
+| *See Event on Calendar* switched off | **left published**, no longer updated |
+| Event date passes (becomes a past event) | **left published**, never touched again |
+
+Removals are always to **Trash**, never a hard delete, and the log names the
+exact reason.
+
+The reasoning: a change *we* make — unticking a group, or CampusGroups hiding
+an event from its own calendar — should never silently delete content an editor
+can see on the site. Those events simply stop being managed; deleting them
+stays a human decision. Only the source of truth saying "this event is
+cancelled or unpublished" removes it automatically.
+
+An event that stopped being managed and later qualifies again is picked back up
+and updated as normal, with no duplicate created — matching is by CampusGroups
+event ID, which never changes.
 
 > Failing open by design: if `whoCanSeeEventOnCalendar` is missing from the API
 > response entirely — e.g. CampusGroups renames the field — events are treated

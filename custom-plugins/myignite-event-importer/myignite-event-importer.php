@@ -402,18 +402,46 @@ function myignite_importer_find_backfill_post_id( $title, $start_date_local ) {
 // FIELD MAPPING
 // -----------------------------------------------------------------------
 
-function myignite_importer_event_should_import( $event ) {
+/**
+ * Has the event gone away on CampusGroups itself?
+ *
+ * These are the ONLY conditions that remove an event already published on the
+ * website. They all mean the same thing: the source of truth no longer has
+ * this as a live, published event, so leaving it on the public site would
+ * advertise something that is cancelled or was never meant to go out.
+ *
+ * @return string Human-readable reason, or '' if the event is still live.
+ */
+function myignite_importer_event_removed_at_source( $event ) {
+	if ( ! empty( $event['deleted'] ) ) {
+		return 'deleted on CampusGroups';
+	}
+	if ( ! empty( $event['draft'] ) ) {
+		return 'moved back to draft on CampusGroups';
+	}
+	if ( ( $event['approvalStatus'] ?? '' ) !== 'Approved' ) {
+		return 'no longer approved on CampusGroups (' . ( $event['approvalStatus'] ?? 'unknown status' ) . ')';
+	}
+	return '';
+}
+
+/**
+ * Do we choose to publish this event?
+ *
+ * Failing these means "do not import, and stop updating" - it does NOT mean
+ * "remove what is already on the website". The distinction matters: these are
+ * OUR filters, and a settings change on our side should never silently delete
+ * content an editor can see. Only myignite_importer_event_removed_at_source()
+ * above removes anything.
+ *
+ * @return string Reason it is filtered out, or '' if it should be imported.
+ */
+function myignite_importer_event_filtered_out( $event ) {
 	$group_id = (int) ( $event['groupId'] ?? 0 );
 	// Reads the saved settings, falling back to MYIGNITE_ALLOWED_GROUPS
 	// until an admin has saved the settings page for the first time.
 	if ( ! array_key_exists( $group_id, myignite_importer_enabled_groups() ) ) {
-		return false;
-	}
-	if ( ! empty( $event['draft'] ) ) {
-		return false;
-	}
-	if ( ( $event['approvalStatus'] ?? '' ) !== 'Approved' ) {
-		return false;
+		return 'its group is not ticked in the importer settings';
 	}
 
 	// Only publish events CampusGroups itself shows publicly.
@@ -427,16 +455,21 @@ function myignite_importer_event_should_import( $event ) {
 	//
 	// FAILS OPEN on purpose. If the key is missing entirely - because
 	// CampusGroups renamed or dropped it - we treat the event as visible
-	// rather than hidden. Failing closed would make one upstream schema
-	// change silently trash every event on the website; a hidden event
-	// slipping through is a far smaller problem than that, and is visible
-	// in the log. Only an explicit, non-"Everyone" value excludes.
+	// rather than hidden. Only an explicit, non-"Everyone" value excludes.
 	if ( array_key_exists( 'whoCanSeeEventOnCalendar', $event )
 		&& 'Everyone' !== $event['whoCanSeeEventOnCalendar'] ) {
-		return false;
+		return 'not publicly visible (See Event on Calendar = "' . $event['whoCanSeeEventOnCalendar'] . '")';
 	}
 
-	return true;
+	return '';
+}
+
+/**
+ * Should this event be created/updated on the website? Both gates must pass.
+ */
+function myignite_importer_event_should_import( $event ) {
+	return '' === myignite_importer_event_removed_at_source( $event )
+		&& '' === myignite_importer_event_filtered_out( $event );
 }
 
 /**
@@ -628,24 +661,36 @@ function myignite_importer_sync_single_event( $event, $photos, $dry_run ) {
 
 	$existing_id = myignite_importer_find_post_by_cg_id( $cg_id );
 
-	// Deleted, unapproved, draft, or no longer in an allowed group on the
-	// CampusGroups side: trash our copy if we had previously imported it,
-	// otherwise there is nothing to do.
-	if ( ! empty( $event['deleted'] ) || ! myignite_importer_event_should_import( $event ) ) {
+	// ------------------------------------------------------------------
+	// Two distinct outcomes, deliberately kept apart.
+	// ------------------------------------------------------------------
+
+	// 1. Gone at the source (deleted / back to draft / approval revoked):
+	//    the event is cancelled or unpublished on CampusGroups, so it must
+	//    not keep advertising itself on the public website. Trashed, never
+	//    hard-deleted, and the log names the exact reason - a removal with
+	//    no stated cause is the silent behaviour we left Aggregator to escape.
+	$removed_why = myignite_importer_event_removed_at_source( $event );
+	if ( '' !== $removed_why ) {
 		if ( $existing_id ) {
-			// Say which rule removed it - "trashed" with no reason was the
-			// kind of silent behaviour we left Event Aggregator to escape.
-			$why = ! empty( $event['deleted'] ) ? 'deleted on CampusGroups'
-				: ( ! empty( $event['draft'] ) ? 'is a draft on CampusGroups'
-				: ( ( $event['approvalStatus'] ?? '' ) !== 'Approved' ? 'not approved (' . ( $event['approvalStatus'] ?? 'unknown status' ) . ')'
-				: ( array_key_exists( 'whoCanSeeEventOnCalendar', $event ) && 'Everyone' !== $event['whoCanSeeEventOnCalendar']
-					? 'not publicly visible (See Event on Calendar = "' . $event['whoCanSeeEventOnCalendar'] . '")'
-					: 'its group is no longer ticked in the importer settings' ) ) );
-			myignite_importer_log( "Event {$cg_id} (post {$existing_id}): trashed - {$why}." );
+			myignite_importer_log( "Event {$cg_id} (post {$existing_id}): trashed - {$removed_why}." );
 			if ( ! $dry_run ) {
 				wp_trash_post( $existing_id );
 			}
 			return 'trashed';
+		}
+		return 'skipped';
+	}
+
+	// 2. Filtered out by OUR settings (group not ticked, not publicly
+	//    visible): we simply do not manage this event. Anything already on
+	//    the website is left exactly as it is - published, untouched, and
+	//    no longer updated. Our own configuration must never delete content
+	//    an editor can see; removing it stays a human decision.
+	$filtered_why = myignite_importer_event_filtered_out( $event );
+	if ( '' !== $filtered_why ) {
+		if ( $existing_id ) {
+			myignite_importer_log( "Event {$cg_id} (post {$existing_id}): left as-is, no longer managed - {$filtered_why}." );
 		}
 		return 'skipped';
 	}
