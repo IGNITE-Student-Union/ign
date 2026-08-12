@@ -114,7 +114,13 @@ jobs:
   # ---------------------------------------------------------------------
   deploy-plugin-myignite-importer:
     name: Deploy → MyIGNITE Event Importer plugin
-    needs: build
+    # Depends on the THEME deploy, not on build, purely to serialise them.
+    # WP Engine's SSH gateway refuses a second concurrent session: with both
+    # jobs on `needs: build` they started together, the theme rsync won, and
+    # this one sat for 7 minutes before failing with "Failed to create shell"
+    # / "rsync error: code 12" - while the run still deployed the theme, so
+    # the site looked updated and only the plugin was silently left behind.
+    needs: deploy-production
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
     environment:
