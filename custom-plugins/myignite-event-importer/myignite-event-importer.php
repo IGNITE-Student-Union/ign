@@ -415,6 +415,27 @@ function myignite_importer_event_should_import( $event ) {
 	if ( ( $event['approvalStatus'] ?? '' ) !== 'Approved' ) {
 		return false;
 	}
+
+	// Only publish events CampusGroups itself shows publicly.
+	//
+	// Confirmed against real data: every event with
+	// whoCanSeeEventOnCalendar = "No one" is absent from the public events
+	// list (the mobile_ws feed), which is also our only source of images -
+	// so these events could never have a featured image, and they are not
+	// meant for a public audience in the first place (they also carry
+	// privacyLevel = "Some IGNITE Student Union users only").
+	//
+	// FAILS OPEN on purpose. If the key is missing entirely - because
+	// CampusGroups renamed or dropped it - we treat the event as visible
+	// rather than hidden. Failing closed would make one upstream schema
+	// change silently trash every event on the website; a hidden event
+	// slipping through is a far smaller problem than that, and is visible
+	// in the log. Only an explicit, non-"Everyone" value excludes.
+	if ( array_key_exists( 'whoCanSeeEventOnCalendar', $event )
+		&& 'Everyone' !== $event['whoCanSeeEventOnCalendar'] ) {
+		return false;
+	}
+
 	return true;
 }
 
@@ -612,7 +633,15 @@ function myignite_importer_sync_single_event( $event, $photos, $dry_run ) {
 	// otherwise there is nothing to do.
 	if ( ! empty( $event['deleted'] ) || ! myignite_importer_event_should_import( $event ) ) {
 		if ( $existing_id ) {
-			myignite_importer_log( "Event {$cg_id} (post {$existing_id}): trashed - no longer an approved/active event in an allowed group on CampusGroups." );
+			// Say which rule removed it - "trashed" with no reason was the
+			// kind of silent behaviour we left Event Aggregator to escape.
+			$why = ! empty( $event['deleted'] ) ? 'deleted on CampusGroups'
+				: ( ! empty( $event['draft'] ) ? 'is a draft on CampusGroups'
+				: ( ( $event['approvalStatus'] ?? '' ) !== 'Approved' ? 'not approved (' . ( $event['approvalStatus'] ?? 'unknown status' ) . ')'
+				: ( array_key_exists( 'whoCanSeeEventOnCalendar', $event ) && 'Everyone' !== $event['whoCanSeeEventOnCalendar']
+					? 'not publicly visible (See Event on Calendar = "' . $event['whoCanSeeEventOnCalendar'] . '")'
+					: 'its group is no longer ticked in the importer settings' ) ) );
+			myignite_importer_log( "Event {$cg_id} (post {$existing_id}): trashed - {$why}." );
 			if ( ! $dry_run ) {
 				wp_trash_post( $existing_id );
 			}

@@ -148,6 +148,38 @@ once the theme renders it (`card-tribe_events.php` uses
 unprefixed original (often 2048px), then `r3_` (1280×640), then the `r2_` URL as
 given. **Do not "simplify" this back to using the API's URL directly.**
 
+## Which events get published
+
+An event is imported only when **all** of these are true on CampusGroups:
+
+| Requirement | Field |
+|---|---|
+| Hosted by a ticked group | `groupId` |
+| Approved | `approvalStatus = Approved` |
+| Not a draft | `draft = false` |
+| Not deleted | `deleted = false` |
+| **Publicly visible** | `whoCanSeeEventOnCalendar = Everyone` |
+| Starts today or later | `startDate` |
+
+The visibility rule matters most often in practice. An event set to
+**See Event on Calendar → No one** is hidden from CampusGroups' own public
+events list, so it is not something to publish on the public website — and,
+because that same list is our only image source, it could never have a featured
+image anyway.
+
+If an event should appear on the website but does not, check that setting first;
+it is the usual cause. Changing it on CampusGroups is enough — the next run
+picks the event up, image included, with no code change.
+
+An event that already exists on the website and later stops meeting any of these
+rules is moved to **Trash** (not deleted), and the log records which specific
+rule removed it.
+
+> Failing open by design: if `whoCanSeeEventOnCalendar` is missing from the API
+> response entirely — e.g. CampusGroups renames the field — events are treated
+> as visible rather than hidden. Failing closed would let one upstream schema
+> change trash the entire calendar in a single run.
+
 An event with no image usually means one of:
 
 - its **See Event on Calendar** setting is *No one* on CampusGroups, so it is
