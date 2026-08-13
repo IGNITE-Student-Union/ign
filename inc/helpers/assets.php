@@ -120,6 +120,46 @@ function takt_assets_after_tec() {
 }
 add_action( 'wp_enqueue_scripts', 'takt_assets_after_tec', 100 );
 
+/**
+ * Preload the primary body font.
+ *
+ * General Sans is a single variable font (weight 200–700) covering the
+ * regular-style text on every page. It's declared in screen/fonts.css, so
+ * without a preload the browser only discovers it after screen.css has
+ * downloaded and been parsed. Preloading lets the font fetch start in
+ * parallel with the CSS instead of after it — purely additive, no existing
+ * behaviour changes. The italic cut is used far less and is left unpreloaded.
+ */
+function takt_preload_fonts() {
+	printf(
+		'<link rel="preload" as="font" type="font/woff2" href="%s" crossorigin>' . "\n",
+		esc_url( get_theme_file_uri( 'public/fonts/GeneralSans-Variable.woff2' ) )
+	);
+}
+add_action( 'wp_head', 'takt_preload_fonts', 1 );
+
+/**
+ * Defer Smush's lazy-load script.
+ *
+ * wp-smushit enqueues smush-lazy-load.min.js render-blocking; it only wires
+ * up an IntersectionObserver on DOMContentLoaded, so deferring it is safe —
+ * it isn't needed before the DOM exists — and takes it off the critical
+ * rendering path. Matched on $src rather than $handle since the plugin's
+ * exact handle name isn't something this theme controls.
+ */
+function takt_defer_smush_lazy_load( $tag, $handle, $src ) {
+	if ( false === strpos( $src, 'smush-lazy-load' ) ) {
+		return $tag;
+	}
+
+	if ( false !== strpos( $tag, ' defer' ) ) {
+		return $tag;
+	}
+
+	return str_replace( ' src=', ' defer src=', $tag );
+}
+add_filter( 'script_loader_tag', 'takt_defer_smush_lazy_load', 10, 3 );
+
 // Load editor stylesheets.
 function takt_editor_styles() {
 	// Anton's @font-face now lives in screen/fonts.css (self-hosted, see
