@@ -89,22 +89,34 @@ document.addEventListener( 'DOMContentLoaded', function () {
 							// Load More: append new cards to existing grid
 							var existingGrid = results.querySelector( '.grid' );
 							var newGrid = newResults.querySelector( '.grid' );
+							var firstNewCard = newGrid ? newGrid.firstElementChild : null;
 							if ( existingGrid && newGrid ) {
 								var cards = newGrid.children;
 								while ( cards.length > 0 ) {
 									existingGrid.appendChild( cards[ 0 ] );
 								}
 							}
-							// Update load more button
+							// Update load more button. Update the existing node in place
+							// instead of replaceWith()-ing it: replaceWith() destroys the
+							// element the user just activated via keyboard, which drops
+							// focus to <body> once the new content is inserted.
 							var newLoadMore = responseSection.querySelector( '.archive-load-more' );
 							var oldLoadMore = section.querySelector( '.archive-load-more' );
-							if ( oldLoadMore ) {
-								if ( newLoadMore ) {
-									oldLoadMore.replaceWith( newLoadMore );
-								} else {
-									oldLoadMore.remove();
+							var loadMoreButton = oldLoadMore ? oldLoadMore.querySelector( 'button' ) : null;
+							if ( oldLoadMore && newLoadMore && loadMoreButton ) {
+								var newButton = newLoadMore.querySelector( 'button' );
+								if ( newButton ) {
+									loadMoreButton.disabled = false;
+									loadMoreButton.removeAttribute( 'aria-disabled' );
+									loadMoreButton.removeAttribute( 'aria-busy' );
+									loadMoreButton.textContent = newButton.textContent;
+									loadMoreButton.dataset.nextPage = newButton.dataset.nextPage;
+									loadMoreButton.dataset.maxPages = newButton.dataset.maxPages;
+									delete loadMoreButton.dataset.originalText;
 								}
-							} else if ( newLoadMore ) {
+							} else if ( oldLoadMore && ! newLoadMore ) {
+								oldLoadMore.remove();
+							} else if ( ! oldLoadMore && newLoadMore ) {
 								// Restore button if it was removed but new content has it
 								var oldButton = section.querySelector( '.archive-load-more button' );
 								if ( oldButton ) {
@@ -115,6 +127,21 @@ document.addEventListener( 'DOMContentLoaded', function () {
 										oldButton.textContent = oldButton.dataset.originalText;
 									}
 								}
+							}
+
+							// Move focus to the heading of the first newly-loaded post so
+							// screen readers announce "moved to: [new post title]" and the
+							// user continues reading from where new content begins. Fall
+							// back to the (now-preserved) Load More button if no heading
+							// is found in the new markup.
+							var newHeading = firstNewCard ? firstNewCard.querySelector( 'h2, h3' ) : null;
+							if ( newHeading ) {
+								if ( ! newHeading.hasAttribute( 'tabindex' ) ) {
+									newHeading.setAttribute( 'tabindex', '-1' );
+								}
+								newHeading.focus( { preventScroll: true } );
+							} else if ( loadMoreButton ) {
+								loadMoreButton.focus( { preventScroll: true } );
 							}
 						} else {
 							results.innerHTML = newResults.innerHTML;
