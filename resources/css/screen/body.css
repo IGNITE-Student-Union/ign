@@ -133,3 +133,17 @@ body {
 .card-team-member:hover img {
 	transform: scale(1.05);
 }
+
+/* Freshchat launcher (injected by the Headers and Footers plugin, not part of
+   this repo — see #fc_frame) is fixed at bottom:10px/right:10px and can sit
+   on top of the open mobile nav panel (.header-main.menu-open) at short
+   viewport heights, e.g. WCAG 1.4.10 reflow testing at 400% browser zoom.
+   Hidden only while the mobile menu is actually open, below the same
+   --breakpoint-md (60rem) the nav itself stacks at, so the chat entry point
+   stays available everywhere else. */
+@media (max-width: 59.9375rem) {
+	body:has(.header-main.menu-open) #fc_frame {
+		visibility: hidden;
+		pointer-events: none;
+	}
+}
