@@ -45,14 +45,11 @@ if ( $start_date ) {
 }
 
 // Row-layout overrides. The image keeps its 4:3 ratio but is sized from a fixed
-// height instead of the container width, and the date badge drops to the
-// compact-row sizing so it does not swamp the smaller image.
+// height instead of the container width, so a lone event sits beside its
+// details rather than stretching a container-wide image down the page.
 $row_card_class    = $is_full_width ? 'sm:flex-row sm:items-center sm:gap-8' : '';
-$row_image_class   = $is_full_width ? 'sm:w-auto sm:h-[160px] md:h-[180px] sm:shrink-0' : '';
+$row_image_class   = $is_full_width ? 'sm:w-auto sm:h-[320px] md:h-[360px] sm:shrink-0' : '';
 $row_details_class = $is_full_width ? 'sm:flex-1 sm:min-w-0' : '';
-$row_badge_class   = $is_full_width ? 'sm:w-[72px] sm:py-2' : '';
-$row_badge_meta    = $is_full_width ? 'sm:text-sm' : '';
-$row_badge_day     = $is_full_width ? 'sm:text-[1.75rem]' : '';
 ?>
 
 <div data-animate="fade-up" class="<?php echo class_name( [ 'md:col-span-2' => $is_full_width ] ); ?>">
@@ -72,11 +69,11 @@ $row_badge_day     = $is_full_width ? 'sm:text-[1.75rem]' : '';
 			<?php endif; ?>
 
 			<?php if ( $start_date ) : ?>
-				<div class="relative ml-auto w-[104px] bg-charcoal rounded-lg py-3 px-1 text-center text-white flex flex-col items-center <?php echo esc_attr( $row_badge_class ); ?>">
+				<div class="relative ml-auto w-[104px] bg-charcoal rounded-lg py-3 px-1 text-center text-white flex flex-col items-center">
 					<span class="sr-only"><?php echo esc_html( $accessible_date ); ?></span>
-					<span class="font-sans font-medium text-base leading-[1.5] <?php echo esc_attr( $row_badge_meta ); ?>" aria-hidden="true"><?php echo esc_html( $day_of_week ); ?></span>
-					<span class="font-sans font-bold text-[2.5rem] leading-[1.1] <?php echo esc_attr( $row_badge_day ); ?>" aria-hidden="true"><?php echo esc_html( $day_number ); ?></span>
-					<span class="font-sans font-medium text-base leading-[1.5] <?php echo esc_attr( $row_badge_meta ); ?>" aria-hidden="true"><?php echo esc_html( $month_year ); ?></span>
+					<span class="font-sans font-medium text-base leading-[1.5]" aria-hidden="true"><?php echo esc_html( $day_of_week ); ?></span>
+					<span class="font-sans font-bold text-[2.5rem] leading-[1.1]" aria-hidden="true"><?php echo esc_html( $day_number ); ?></span>
+					<span class="font-sans font-medium text-base leading-[1.5]" aria-hidden="true"><?php echo esc_html( $month_year ); ?></span>
 				</div>
 			<?php endif; ?>
 		</div>
