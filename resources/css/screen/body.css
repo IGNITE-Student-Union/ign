@@ -5,7 +5,24 @@
 }
 
 :root {
-	--header-height: 0rem;
+	/* Pre-JS default for the header's reserved height. Header.js measures the
+	   real header and overwrites both this variable and .header's min-height as
+	   inline styles, so the settled layout is byte-identical either way — these
+	   values only govern the first paint, before screen.js has run.
+
+	   Leaving this at 0 cost ~0.09 CLS on every page with a hero: the hero's
+	   -mt-(--header-height) and h-[calc(var(--header-height)+300px)] laid out
+	   against 0, then snapped to the measured value once screen.js executed.
+
+	   Both declarations below are required. Setting the variable alone pulls the
+	   hero 74px above the top of the page, because .header-main is absolutely
+	   positioned and leaves its .header wrapper collapsed until min-height is
+	   applied — the variable and the reserved height have to move together.
+
+	   Values measured from the rendered header; the seams match --breakpoint-md
+	   (60rem) and --breakpoint-lg (73rem) in spacing.css. Re-measure if the
+	   header's contents or padding change. */
+	--header-height: 141px;
 	--current-header-main-height: var(--header-main-height);
 	--current-header-height: var(--current-header-main-height);
 
@@ -13,6 +30,30 @@
 		var(--wp-admin--admin-bar--height, 0px) + var(--header-margin-top, 0px) +
 			var(--current-header-height, 0px)
 	);
+}
+
+.header {
+	min-height: 141px;
+}
+
+@media (min-width: 60rem) {
+	:root {
+		--header-height: 118px;
+	}
+
+	.header {
+		min-height: 118px;
+	}
+}
+
+@media (min-width: 73rem) {
+	:root {
+		--header-height: 165px;
+	}
+
+	.header {
+		min-height: 165px;
+	}
 }
 
 :root body :where(.wp-site-blocks) > * {
