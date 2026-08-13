@@ -5,16 +5,9 @@ function takt_assets() {
 	$asset = include get_theme_file_path( 'public/css/screen.asset.php' );
 
 	wp_enqueue_style(
-		'takt-google-fonts',
-		'https://fonts.googleapis.com/css2?family=Anton:ital@0;1&display=swap',
-		[],
-		null
-	);
-
-	wp_enqueue_style(
 		'takt',
 		get_theme_file_uri( 'public/css/screen.css' ),
-		array_merge( $asset['dependencies'], [ 'takt-google-fonts' ] ),
+		$asset['dependencies'],
 		$asset['version']
 	);
 
@@ -27,6 +20,73 @@ function takt_assets() {
 	);
 }
 add_action( 'wp_enqueue_scripts', 'takt_assets' );
+
+/**
+ * Dequeue The Events Calendar / Events Calendar Pro's frontend CSS bundle on
+ * pages that don't actually render any of its markup.
+ *
+ * The Featured Events and Dynamic Content Carousel blocks query `tribe_events`
+ * posts directly and render them through the theme's own card templates
+ * (parts/card-tribe_events*.php) — none of TEC's CSS classes are used. TEC/ECP
+ * still self-enqueue their full frontend bundle (common + views + tooltipster
+ * + bootstrap-datepicker + the Mini Calendar block's styles) on every request
+ * regardless. On a page like the homepage that's ~9 extra render-blocking
+ * stylesheet requests for styles nothing on the page references.
+ *
+ * Real TEC views still need the bundle: the events archive and single-event
+ * page (themed via tribe-events/single-event.php) are excluded via
+ * tribe_is_event_query()/is_singular(), and any page where an editor has
+ * actually placed one of TEC's own blocks is excluded via has_block() so
+ * that markup doesn't lose its styling.
+ *
+ * Runs at priority 20 — after TEC registers its styles (priority 10) but
+ * before takt_assets_after_tec() (priority 100) decides whether to wire
+ * 'takt' up as a dependent of tribe-events-views-v2-full.
+ */
+function takt_dequeue_unused_tribe_styles() {
+	if ( ! function_exists( 'tribe_is_event_query' ) ) {
+		return;
+	}
+
+	if ( tribe_is_event_query() || is_singular( 'tribe_events' ) ) {
+		return;
+	}
+
+	$tec_block_names = [
+		'tribe/events-list',
+		'tribe/events-pro-mini-calendar',
+		'tribe/rsvp',
+		'tribe/tickets',
+		'tribe/event-countdown',
+		'tribe/event-schedule',
+		'tribe/events-single-venue',
+		'tribe/events-single-organizer',
+	];
+
+	foreach ( $tec_block_names as $block_name ) {
+		if ( has_block( $block_name ) ) {
+			return;
+		}
+	}
+
+	$handles = [
+		'tribe-events-pro-mini-calendar-block-styles',
+		'tec-variables-skeleton',
+		'tec-variables-full',
+		'tribe-common-skeleton-style',
+		'tribe-common-full-style',
+		'tribe-events-views-v2-bootstrap-datepicker-styles',
+		'tribe-tooltipster-css',
+		'tribe-events-views-v2-skeleton',
+		'tribe-events-views-v2-full',
+	];
+
+	foreach ( $handles as $handle ) {
+		wp_dequeue_style( $handle );
+		wp_deregister_style( $handle );
+	}
+}
+add_action( 'wp_enqueue_scripts', 'takt_dequeue_unused_tribe_styles', 20 );
 
 /**
  * Ensure the theme stylesheet loads after The Events Calendar.
@@ -48,7 +108,8 @@ add_action( 'wp_enqueue_scripts', 'takt_assets_after_tec', 100 );
 
 // Load editor stylesheets.
 function takt_editor_styles() {
-	add_editor_style( 'https://fonts.googleapis.com/css2?family=Anton:ital@0;1&display=swap' );
+	// Anton's @font-face now lives in screen/fonts.css (self-hosted, see
+	// takt_assets()), so this one editor style also covers the heading font.
 	add_editor_style( 'public/css/screen.css' );
 }
 add_action( 'after_setup_theme', 'takt_editor_styles' );
