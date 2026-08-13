@@ -86,7 +86,21 @@ function takt_dequeue_unused_tribe_styles() {
 		wp_deregister_style( $handle );
 	}
 }
-add_action( 'wp_enqueue_scripts', 'takt_dequeue_unused_tribe_styles', 20 );
+// Disabled ahead of launch. The saving is ~24 KB gzipped of render-blocking
+// CSS, which is not worth the failure modes on launch day:
+//
+//   - It works by having wp_deregister_style() make the `registered` half of
+//     takt_assets_after_tec()'s guard fail, so 'takt' is never wired up as a
+//     dependent. That ordering (priority 20 before 100) is load-bearing and
+//     silent if broken — the theme stylesheet would stop printing entirely.
+//   - Only has_block() is checked, so a page using a TEC shortcode or widget
+//     would render its calendar unstyled. No page does today, but content is
+//     editable post-launch.
+//   - has_block() reads the global $post, which is unreliable on archives.
+//
+// To re-enable: uncomment, then verify the events archive, a single event, and
+// a page embedding a calendar all still render styled.
+// add_action( 'wp_enqueue_scripts', 'takt_dequeue_unused_tribe_styles', 20 );
 
 /**
  * Ensure the theme stylesheet loads after The Events Calendar.
