@@ -6,6 +6,7 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 
 require_once 'inc/helpers/setup.php';
 require_once 'inc/helpers/myignite-image-sync.php';
+require_once 'inc/helpers/tec-month-day-404-fix.php';
 
 // Custom code added by Dhairya to fix team member image not displaying on the site
 add_action('admin_enqueue_scripts', function() {
