@@ -496,8 +496,23 @@ function myignite_importer_build_event_fields( $event, $image_url ) {
 	$start_local = ( clone $start_utc )->setTimezone( $tz );
 	$end_local   = ( clone $end_utc )->setTimezone( $tz );
 
-	$location = trim( (string) ( $event['locationName'] ?? '' ) );
-	if ( '' === $location ) {
+	// locationType wins when it says the event is online. Confirmed against
+	// real data (event 375536, "New Club Application Deadline"): CampusGroups
+	// lets an organizer set locationType = "Online Only" while `address` still
+	// holds an unrelated on-campus room left over from before the event was
+	// switched to virtual - address is then not authoritative for where the
+	// event actually is. locationName is left as the one exception, since an
+	// organizer could legitimately use it for a Zoom link/description on an
+	// online event.
+	$location_type = trim( (string) ( $event['locationType'] ?? '' ) );
+	$location_name = trim( (string) ( $event['locationName'] ?? '' ) );
+	$is_online     = false !== stripos( $location_type, 'online' );
+
+	if ( '' !== $location_name ) {
+		$location = $location_name;
+	} elseif ( $is_online ) {
+		$location = 'Online';
+	} else {
 		$location = trim( (string) ( $event['address'] ?? '' ) );
 	}
 
@@ -775,6 +790,13 @@ function myignite_importer_sync_single_event( $event, $photos, $dry_run ) {
 
 	update_post_meta( $post_id, '_myignite_cg_event_id', $cg_id );
 	update_post_meta( $post_id, '_myignite_venue_name', $fields['location'] );
+	// Clears any tribe_venue link left over from an event adopted from the old
+	// Aggregator/ICS pipeline. The display templates (EventHero.php,
+	// card-tribe_events.php, etc.) prefer a linked _EventVenueID over
+	// _myignite_venue_name, so a stale link here would keep showing the old
+	// venue post's title forever, even though the field above is being kept
+	// current from CampusGroups on every sync.
+	delete_post_meta( $post_id, '_EventVenueID' );
 	// Same source as the category term - the CampusGroups group name is
 	// the closest equivalent to the ORGANIZER;CN=... field the old ICS
 	// feed carried, and this is the meta key EventHero.php /
