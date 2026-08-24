@@ -51,6 +51,44 @@ function theme_change_blog_links($post_link, $id = 0){
 }
 add_filter('post_link', 'theme_change_blog_links', 1, 3);
 
+/**
+ * Redirect bare /slug/ requests for posts to their canonical /blog/slug/.
+ *
+ * The site's permalink structure is /%postname%/, so WordPress's own
+ * default rewrite rule already resolves a root-level slug straight to a
+ * post — independently of the /blog/ alias added above. Without this,
+ * /slug/ and /blog/slug/ both return 200 with identical content.
+ */
+function theme_redirect_bare_post_slug_to_blog() {
+    if ( is_admin() || is_preview() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+        return;
+    }
+
+    if ( ! is_singular( 'post' ) ) {
+        return;
+    }
+
+    global $wp, $post;
+
+    if ( strpos( $wp->request, 'blog/' ) === 0 ) {
+        return;
+    }
+
+    if ( ! $post || $post->post_name === '' ) {
+        return;
+    }
+
+    $target = home_url( '/blog/' . $post->post_name . '/' );
+
+    if ( ! empty( $_SERVER['QUERY_STRING'] ) ) {
+        $target .= '?' . $_SERVER['QUERY_STRING'];
+    }
+
+    wp_redirect( $target, 301 );
+    exit;
+}
+add_action( 'template_redirect', 'theme_redirect_bare_post_slug_to_blog' );
+
 // --- Rename "Posts" menu to "Blog" ---
 
 function theme_rename_posts_menu_label($args, $post_type) {
