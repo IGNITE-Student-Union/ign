@@ -8,7 +8,16 @@
  * That's why a direct load of e.g. /events/month/2026-07/ 404s while the
  * same view reached via in-page AJAX navigation renders fine.
  *
- * Reverse the 404 specifically for that out-of-range case; every other 404
+ * The same out-of-range condition also leaves is_post_type_archive/is_archive
+ * false on $wp_query (that's what TEC's own 404 check keys off of). This
+ * site's events page is a custom Site Editor template ("archive-events",
+ * wrapping the tec/archive-events block) that only gets selected when WP
+ * recognizes the request as a real post-type archive — with those flags
+ * false, WordPress resolves a different template instead and the whole page
+ * — hero, calendar, everything — renders blank. So both flags need
+ * restoring alongside is_404, not is_404 alone.
+ *
+ * Reverse this specifically for that out-of-range case; every other 404
  * TEC's controller can set (disabled views, single-event requests) is left
  * alone.
  *
@@ -54,6 +63,8 @@ add_action( 'send_headers', function () {
 		return;
 	}
 
-	$wp_query->is_404 = false;
+	$wp_query->is_404              = false;
+	$wp_query->is_post_type_archive = true;
+	$wp_query->is_archive           = true;
 	status_header( 200 );
 }, 20 );
