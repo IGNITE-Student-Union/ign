@@ -109,8 +109,9 @@ function myignite_render_settings_page() {
 	echo '</ul>';
 
 	echo '<p style="margin-top:14px;"><button type="submit" name="myig_action" value="discover" class="button">Check for other groups</button> '
-		. '<span class="myig-help" style="display:inline;">Asks CampusGroups for groups not already listed above. '
-		. 'Only runs when clicked, to keep API calls down.</span></p>';
+		. '<span class="myig-help" style="display:inline;">Looks for groups not already listed above, among those with '
+		. 'at least one recent or upcoming event right now &mdash; a group with none won\'t show up here until it has '
+		. 'one. Only runs when clicked, to keep API calls down.</span></p>';
 
 	if ( is_array( $discovered ) ) {
 		echo '<div class="myig-discovered">';
@@ -265,29 +266,36 @@ function myignite_save_groups() {
 /**
  * Looks for CampusGroups groups not already in the list. Cached briefly so
  * repeated clicks do not repeatedly hit their API.
+ *
+ * The Data API has no standalone "list all groups" resource (unlike the old
+ * Data Export API's /groups endpoint), so this derives the list from groups
+ * that own at least one event currently returned by the events feed instead.
+ * Known, accepted tradeoff: a group with zero recent/upcoming events won't
+ * appear here until it has one.
  */
 function myignite_handle_discover() {
-	$groups = myignite_importer_cg_data_api_fetch_all( 'groups', '2015-01-01T00:00:00Z', gmdate( 'Y-m-d\TH:i:s\Z' ) );
+	$events = myignite_importer_data_api_fetch_events();
 
-	if ( is_wp_error( $groups ) ) {
-		myignite_importer_record_error( 'groups_fetch', $groups->get_error_message() );
+	if ( is_wp_error( $events ) ) {
+		myignite_importer_record_error( 'groups_fetch', $events->get_error_message() );
 		echo '<div class="notice notice-error is-dismissible"><p>Could not reach CampusGroups: '
-			. esc_html( $groups->get_error_message() ) . '</p></div>';
+			. esc_html( $events->get_error_message() ) . '</p></div>';
 		return;
 	}
 
 	$known = myignite_importer_known_groups();
 	$found = array();
 
-	foreach ( (array) $groups as $g ) {
-		$gid = (int) ( $g['id'] ?? 0 );
-		if ( ! $gid || isset( $known[ $gid ] ) ) {
+	foreach ( $events as $event ) {
+		$gid = (int) ( $event['groupId'] ?? 0 );
+		if ( ! $gid || isset( $known[ $gid ] ) || isset( $found[ $gid ] ) ) {
 			continue;
 		}
-		if ( ! empty( $g['deactivated'] ) ) {
-			continue; // Retired on the CampusGroups side.
+		$gname = trim( (string) ( $event['group'] ?? '' ) );
+		if ( '' === $gname ) {
+			continue;
 		}
-		$found[ $gid ] = (string) ( $g['name'] ?? ( 'Group ' . $gid ) );
+		$found[ $gid ] = $gname;
 	}
 
 	asort( $found );

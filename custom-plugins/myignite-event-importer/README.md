@@ -1,7 +1,9 @@
 # MyIGNITE Event Importer — operations notes
 
 Imports events from MyIGNITE (CampusGroups) into The Events Calendar.
-Replaced the Event Aggregator ICS pipeline on 2026-08-08.
+Replaced the Event Aggregator ICS pipeline on 2026-08-08, then switched from
+CampusGroups' Data Export API to its Data API (`rss_events`) on 2026-08-28 —
+see [Data sources](#data-sources).
 
 ## Where this code lives, and how to change it
 
@@ -79,15 +81,19 @@ Past events are never created or modified, and — importantly — an event that
 merely ages into the past is *not* trashed; it is filtered out before any
 create/update/trash decision is made, so it simply stays as it is.
 
-**Freshness caveat:** CampusGroups' Data Export API is fed by a batch job on
-their side, measured at roughly 18–30 hours behind live. An event created in
-CampusGroups today generally will not appear here until tomorrow, no matter how
-often we poll — which is why the schedule is once a day rather than hourly.
+**Freshness:** the Data API answers from CampusGroups' live database directly
+— confirmed live (create an event, query seconds later, it's already there).
+Unlike the old Data Export API (used until 2026-08-28), there is no batch job
+lag to wait out. The schedule is still once a day for now regardless —
+increasing it is a deliberate separate change, not automatic just because the
+source got faster.
 
-To publish something sooner, create the event by hand in wp-admin using the
-**exact same title and start time** as the CampusGroups event. The next sync
-adopts that post instead of creating a duplicate, and CampusGroups becomes the
-source of truth for it from then on.
+The hand-authored-adoption workflow below still works and is still the
+fastest path if something needs to be live before the next scheduled run:
+create the event by hand in wp-admin using the **exact same title and start
+time** as the CampusGroups event. The next sync adopts that post instead of
+creating a duplicate, and CampusGroups becomes the source of truth for it
+from then on.
 
 ## API credentials, and rotating them
 
@@ -131,24 +137,32 @@ The plugin degrades quietly and safely rather than breaking anything:
 
 ## Data sources
 
-- **Events** — `https://<school>.service.campusgroups.com/data/v1/events`
-  (async: POST returns a `queryId`, GET polls until 200). Auth via
-  `X-CG-API-Secret` + `X-CG-School`.
-- **Groups** — the same API's `/groups` resource, used by *Check for other
-  groups*.
-- **Images** — `mobile_ws/v17/mobile_events_list`, the undocumented endpoint
-  behind the public events page. The Data Export API has no image field at all.
-  It returns *all* upcoming public events (`range` is an offset, not a page
-  limit), so it does not cap at any particular number.
+- **Events, groups, images — all one call** — `https://my.ignitestudentunion.ca/rss_events`,
+  CampusGroups' **Data API**. A single synchronous `GET`, auth via a plain
+  `X-CG-API-Secret` header (the same header/value the old Data Export API
+  used). Answers from CampusGroups' live database directly — no batch layer,
+  no polling. Returns XML, one `<item>` per event, parsed by
+  `myignite_importer_data_api_item_to_array()`.
+- Used until 2026-08-28: the **Data Export API**
+  (`https://<school>.service.campusgroups.com/data/v1/events`, async:
+  POST returns a `queryId`, GET polls until 200) plus a separate,
+  undocumented `mobile_ws/v17/mobile_events_list` call just for images (the
+  Data Export API had no image field at all). Replaced because that API is
+  fed by a batch job on CampusGroups' side, confirmed at roughly 18–30 hours
+  behind live — see git history on this file for what that pipeline looked
+  like if you ever need to compare.
+- **Groups** — the Data API has no standalone "list all groups" resource
+  (the old `/groups` endpoint doesn't carry over). *Check for other groups*
+  instead derives the list from `groupId`/`group` on whatever the events
+  feed currently returns — a group with no recent/upcoming events won't
+  appear until it has one.
 
-### Image resolution
+### Images
 
-`mobile_ws` reports the `r2_` variant, which is only 640×320 and looks blurry
-once the theme renders it (`card-tribe_events.php` uses
-`the_post_thumbnail('full')` inside a 4:3 `object-cover` box).
-`myignite_importer_image_url_candidates()` therefore tries, in order: the
-unprefixed original (often 2048px), then `r3_` (1280×640), then the `r2_` URL as
-given. **Do not "simplify" this back to using the API's URL directly.**
+The Data API hands back `eventOriginalPhotoFullUrl` directly — the true
+original upload. No resize-variant guessing needed (the old `mobile_ws` feed
+only ever reported a downscaled `r2_` copy, which the now-retired
+`myignite_importer_image_url_candidates()` worked around).
 
 ## Which events get published
 
@@ -157,17 +171,22 @@ An event is imported only when **all** of these are true on CampusGroups:
 | Requirement | Field |
 |---|---|
 | Hosted by a ticked group | `groupId` |
-| Approved | `approvalStatus = Approved` |
-| Not a draft | `draft = false` |
-| Not deleted | `deleted = false` |
-| **Publicly visible** | `whoCanSeeEventOnCalendar = Everyone` |
-| Starts today or later | `startDate` |
+| Approved | `approvalStatus = 1` (strict allow-list — see below) |
+| Not a draft | `draft = 0` |
+| Not deleted | `eventDelete = 0` |
+| **Publicly visible** | `publishCalendar = 0` ("Everyone") |
+| Starts today or later | `eventStartDateTime` |
+
+`approvalStatus` has no documented value legend beyond `1 = approved`
+(confirmed repeatedly against real events). Rather than guess what other
+codes mean, anything except `1` — a code never seen before, or the field
+missing — is treated as not approved. If a genuinely new code ever turns up
+in production, it's logged as a `NOTE:` line in the sync log the first time
+it happens.
 
 The visibility rule matters most often in practice. An event set to
 **See Event on Calendar → No one** is hidden from CampusGroups' own public
-events list, so it is not something to publish on the public website — and,
-because that same list is our only image source, it could never have a featured
-image anyway.
+events list, so it is not something to publish on the public website.
 
 If an event should appear on the website but does not, check that setting first;
 it is the usual cause. Changing it on CampusGroups is enough — the next run
@@ -200,16 +219,16 @@ An event that stopped being managed and later qualifies again is picked back up
 and updated as normal, with no duplicate created — matching is by CampusGroups
 event ID, which never changes.
 
-> Failing open by design: if `whoCanSeeEventOnCalendar` is missing from the API
+> Failing open by design: if `publishCalendar` is missing from the API
 > response entirely — e.g. CampusGroups renames the field — events are treated
 > as visible rather than hidden. Failing closed would let one upstream schema
 > change trash the entire calendar in a single run.
 
 An event with no image usually means one of:
 
-- its **See Event on Calendar** setting is *No one* on CampusGroups, so it is
-  absent from the public list `mobile_ws` serves — the fix is on CampusGroups,
-  not here; or
+- its **See Event on Calendar** setting is *No one* on CampusGroups, so it
+  never reaches this importer at all — the fix is on CampusGroups, not here;
+  or
 - nobody uploaded a photo to the event.
 
 A small image (e.g. 474×237) means that is genuinely what was uploaded to
@@ -223,10 +242,14 @@ CampusGroups. Re-upload a larger photo there.
   there were really 48. Query `wp_posts` directly.
 - Deleting events with `wp_delete_post()` leaves rows behind in
   `wp_tec_occurrences` / `wp_tec_events`; they need clearing separately.
-- The API window is on `updatedOn`, **not** the event date. An earlier version
-  used an incremental "changed since last run" window; that silently did
-  nothing when the change was on *our* side (e.g. images deleted locally), so
-  every run now queries a wide window and filters by event date instead.
+- Every run pulls the full events feed and filters by event date in code
+  (`myignite_sync_events()`), rather than asking the API to scope the pull
+  itself. An earlier version relied on an incremental "changed since last
+  run" window; that silently did nothing when the change was on *our* side
+  (e.g. images deleted locally). The Data API has no equivalent windowing
+  concern in the first place — it isn't a batch snapshot — but the
+  wide-pull-then-filter pattern is kept for the same reason: it can't skip
+  something permanently just because one run had a problem.
 - `MYIGNITE_IMPORTER_MAX_PER_RUN` truncating a run no longer advances anything
   that could cause events to be skipped permanently.
 

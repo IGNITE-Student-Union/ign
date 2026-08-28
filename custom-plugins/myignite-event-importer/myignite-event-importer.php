@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: MyIGNITE Event Importer
- * Description: Imports events from MyIGNITE (CampusGroups) via the CampusGroups Data Export API, replacing the Event Aggregator ICS pipeline for The Events Calendar. <strong>Runs automatically once a day at 6:00 PM Toronto time.</strong> Manual run: <code>wp myignite sync-events</code> (add <code>--dry-run</code> to preview). Activity log: <code>wp-content/myignite-event-sync.log</code>. Note: CampusGroups' Data Export API is itself refreshed by a batch job on their side, so a brand-new event typically appears here within about a day, not instantly. Requires MYIGNITE_CG_SCHOOL_CODE / MYIGNITE_CG_API_SECRET in wp-content/mu-plugins.
+ * Description: Imports events from MyIGNITE (CampusGroups) via the CampusGroups Data API (rss_events), replacing the Event Aggregator ICS pipeline for The Events Calendar. <strong>Runs automatically once a day at 6:00 PM Toronto time.</strong> Manual run: <code>wp myignite sync-events</code> (add <code>--dry-run</code> to preview). Activity log: <code>wp-content/myignite-event-sync.log</code>. Note: the Data API answers from CampusGroups' live database directly (confirmed: an event created there is visible here within seconds), unlike the old Data Export API this plugin used until 2026-08-28, which was fed by a batch job roughly 18-30 hours behind live. Requires MYIGNITE_CG_SCHOOL_CODE / MYIGNITE_CG_API_SECRET in wp-content/mu-plugins.
  * Version: 1.0.0
  */
 
@@ -36,10 +36,8 @@ define( 'MYIGNITE_ALLOWED_GROUPS', array(
 	35442 => 'IGNITE Governance',
 ) );
 
-// Undocumented endpoint that backs the public MyIGNITE events list
-// client-side - no auth required. This is the only source that carries
-// each event's own photo; the Data Export API has no image field at all.
-define( 'MYIGNITE_CG_EVENTS_LIST_API', 'https://my.ignitestudentunion.ca/mobile_ws/v17/mobile_events_list' );
+// Base host for CampusGroups' Data API (see myignite_importer_data_api_fetch_events()
+// below) - the same host every rsvp/event link on the site already points at.
 define( 'MYIGNITE_CG_HOST', 'https://my.ignitestudentunion.ca' );
 
 
@@ -200,7 +198,18 @@ function myignite_importer_block_log_access() {
 
 
 // -----------------------------------------------------------------------
-// CAMPUSGROUPS DATA EXPORT API (title / dates / location / description)
+// CAMPUSGROUPS DATA API (title / dates / location / description / image)
+//
+// Replaced the Data Export API here on 2026-08-28. That API was a
+// batch-materialized, async (POST-then-poll) endpoint fed by a job on
+// CampusGroups' side roughly 18-30 hours behind live - confirmed directly:
+// 13 real, approved events were completely absent from its results as late
+// as a same-day 6pm sync, appearing only some hours after. The Data API's
+// rss_events resource instead answers from CampusGroups' live database on a
+// single synchronous request - confirmed live (create an event, query
+// seconds later, it's already there). It also carries the event's own photo
+// directly, so the separate mobile_ws image-only pipeline this file used to
+// run alongside the Data Export API is gone too - one feed, one HTTP call.
 // -----------------------------------------------------------------------
 
 /**
@@ -216,136 +225,111 @@ function myignite_importer_cg_credentials() {
 }
 
 /**
- * Fetches every page of a Data Export API resource for a given
- * updatedOn window (this API filters by when a record was last
- * touched, not by event start date - so a brand-new event dated months
- * out still shows up immediately).
+ * Fetches events from CampusGroups' Data API (rss_events).
  *
- * The API is asynchronous: POST registers a query and returns a
- * queryId; GET with that queryId returns HTTP 202 ("still running")
- * until results are ready, then 200 with a page of Results and an
- * optional NextToken for the next page. Confirmed live that a single
- * fixed delay is not reliably enough, so this polls.
+ * Auth is a plain X-CG-API-Secret header - the same header/value the old
+ * Data Export API call used, confirmed working against this endpoint too.
+ * (rss_events also accepts a ts+preauth query-string scheme - its own 403
+ * error text even describes a formula for it - but the header matches this
+ * codebase's existing pattern exactly, so use that and skip the extra
+ * moving part.)
  *
- * @return array|WP_Error Flat array of result rows, or WP_Error.
+ * Always pulls broadly (time_range=all, deleted=1 so removed events still
+ * carry the eventDelete signal that trashes them here - CampusGroups
+ * otherwise excludes deleted events from results entirely) and lets
+ * myignite_sync_events() do the real filtering by event date, exactly as
+ * the old Data Export API integration did. Unlike that API, there is no
+ * batch snapshot to window around here, so no incremental/checkpoint logic
+ * is needed - a single request each run is enough.
+ *
+ * @param array $args Extra/overriding query args, e.g. ['updated_after' => '2026-08-01 00:00:00'].
+ * @return array|WP_Error Flat array of event rows (see
+ *                         myignite_importer_data_api_item_to_array()), or WP_Error.
  */
-function myignite_importer_cg_data_api_fetch_all( $resource, $updated_start, $updated_end ) {
+function myignite_importer_data_api_fetch_events( $args = array() ) {
 	$creds = myignite_importer_cg_credentials();
 	if ( ! $creds ) {
 		return new WP_Error( 'myignite_missing_credentials', 'MYIGNITE_CG_SCHOOL_CODE / MYIGNITE_CG_API_SECRET are not defined.' );
 	}
-	list( $school, $secret ) = $creds;
+	list( , $secret ) = $creds;
 
-	$base    = sprintf( 'https://%s.service.campusgroups.com/data/v1/%s', $school, $resource );
-	$headers = array(
-		'X-CG-API-Secret' => $secret,
-		'X-CG-School'     => $school,
-	);
+	$query_args = array_merge( array(
+		'deleted'    => 1,
+		'time_range' => 'all',
+		'limit'      => 5000, // Comfortably above the real corpus; MYIGNITE_IMPORTER_MAX_PER_RUN caps processing regardless.
+	), $args );
 
-	$post_url      = add_query_arg( array( 'updatedStart' => $updated_start, 'updatedEnd' => $updated_end ), $base );
-	$post_response = wp_remote_post( $post_url, array( 'headers' => $headers, 'timeout' => 20 ) );
+	$url = add_query_arg( $query_args, MYIGNITE_CG_HOST . '/rss_events' );
 
-	if ( is_wp_error( $post_response ) ) {
-		return $post_response;
+	$response = wp_remote_get( $url, array(
+		'timeout' => 30,
+		'headers' => array( 'X-CG-API-Secret' => $secret ),
+	) );
+
+	if ( is_wp_error( $response ) ) {
+		return $response;
 	}
-	if ( 200 !== (int) wp_remote_retrieve_response_code( $post_response ) ) {
-		return new WP_Error( 'myignite_cg_query_failed', "Data Export API POST /{$resource} returned HTTP " . wp_remote_retrieve_response_code( $post_response ) . ': ' . wp_remote_retrieve_body( $post_response ) );
-	}
-
-	$post_data = json_decode( wp_remote_retrieve_body( $post_response ), true );
-	$query_id  = $post_data['queryId'] ?? null;
-	if ( ! $query_id ) {
-		return new WP_Error( 'myignite_cg_no_query_id', "Data Export API POST /{$resource} did not return a queryId." );
-	}
-
-	$results = array();
-	$token   = null;
-
-	for ( $page = 0; $page < 50; $page++ ) {
-		$page_args = array( 'queryId' => $query_id, 'size' => 999 );
-		if ( $token ) {
-			$page_args['token'] = $token;
-		}
-		$get_url = add_query_arg( $page_args, $base );
-
-		$page_data = null;
-		for ( $poll = 0; $poll < 15; $poll++ ) {
-			sleep( 0 === $poll ? 2 : 3 );
-			$get_response = wp_remote_get( $get_url, array( 'headers' => $headers, 'timeout' => 20 ) );
-			if ( is_wp_error( $get_response ) ) {
-				return $get_response;
-			}
-			$code = (int) wp_remote_retrieve_response_code( $get_response );
-			if ( 202 === $code ) {
-				continue;
-			}
-			if ( 200 !== $code ) {
-				return new WP_Error( 'myignite_cg_fetch_failed', "Data Export API GET /{$resource} returned HTTP {$code}: " . wp_remote_retrieve_body( $get_response ) );
-			}
-			$page_data = json_decode( wp_remote_retrieve_body( $get_response ), true );
-			break;
-		}
-
-		if ( null === $page_data ) {
-			return new WP_Error( 'myignite_cg_query_timeout', "Data Export API query for /{$resource} never finished running." );
-		}
-
-		if ( ! empty( $page_data['Results'] ) ) {
-			$results = array_merge( $results, $page_data['Results'] );
-		}
-		$token = $page_data['NextToken'] ?? null;
-		if ( ! $token ) {
-			break;
-		}
+	$code = (int) wp_remote_retrieve_response_code( $response );
+	if ( 200 !== $code ) {
+		return new WP_Error( 'myignite_cg_fetch_failed', "Data API GET /rss_events returned HTTP {$code}: " . wp_remote_retrieve_body( $response ) );
 	}
 
-	return $results;
+	$body = wp_remote_retrieve_body( $response );
+	libxml_use_internal_errors( true );
+	// LIBXML_NOCDATA folds CDATA into plain text; LIBXML_NONET blocks any
+	// external-entity network fetch the XML might otherwise try to trigger.
+	$xml = simplexml_load_string( $body, 'SimpleXMLElement', LIBXML_NOCDATA | LIBXML_NONET );
+
+	if ( false === $xml ) {
+		return new WP_Error( 'myignite_cg_bad_xml', 'Data API GET /rss_events returned unparseable XML.' );
+	}
+	if ( ! isset( $xml->channel->item ) ) {
+		return array(); // A run with nothing to report is a valid, ordinary response - not an error.
+	}
+
+	$events = array();
+	foreach ( $xml->channel->item as $item ) {
+		$events[] = myignite_importer_data_api_item_to_array( $item );
+	}
+
+	if ( count( $events ) === (int) $query_args['limit'] ) {
+		myignite_importer_log( 'WARNING: Data API returned exactly the requested limit (' . $query_args['limit'] . ') of events - results may have been truncated.' );
+	}
+
+	return $events;
 }
 
-
-// -----------------------------------------------------------------------
-// CAMPUSGROUPS EVENTS-LIST API (image only - Data Export API has none)
-// -----------------------------------------------------------------------
-
 /**
- * @return array<int,string> Map of CampusGroups event ID => full photo URL.
+ * Pulls exactly the fields the rest of this file needs out of one <item>, as
+ * plain strings. Deliberately explicit field-by-field rather than a generic
+ * XML-to-array cast of the whole item - several sibling elements
+ * (customFields, eventTopicsSeparated, externalReferences) are structured,
+ * not scalar, and are not needed here.
+ *
+ * @return array<string,string>
  */
-function myignite_importer_fetch_event_photos() {
-	$response = wp_remote_get(
-		add_query_arg( array( 'range' => 0, 'limit' => 500 ), MYIGNITE_CG_EVENTS_LIST_API ),
-		array( 'timeout' => 15 )
+function myignite_importer_data_api_item_to_array( SimpleXMLElement $item ) {
+	return array(
+		'id'                        => (string) $item->eventId,
+		'groupId'                   => (string) $item->groupId,
+		'group'                     => (string) $item->group,
+		'title'                     => (string) $item->title,
+		'description'               => (string) $item->description,
+		'fullDescription'           => (string) $item->fullDescription,
+		'eventLocation'             => (string) $item->eventLocation,
+		'locationType'              => (string) $item->locationType,
+		'eventStartDateTime'        => (string) $item->eventStartDateTime,
+		'eventEndDateTime'          => (string) $item->eventEndDateTime,
+		'eventLink'                 => (string) $item->eventLink,
+		'eventType'                 => (string) $item->eventType,
+		'eventTopics'               => (string) $item->eventTopics,
+		'eventOriginalPhotoFullUrl' => (string) $item->eventOriginalPhotoFullUrl,
+		'eventPhotoFullUrl'         => (string) $item->eventPhotoFullUrl,
+		'draft'                     => (string) $item->draft,
+		'eventDelete'               => (string) $item->eventDelete,
+		'approvalStatus'            => (string) $item->approvalStatus,
+		'publishCalendar'           => (string) $item->publishCalendar,
 	);
-
-	if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
-		myignite_importer_log( 'CampusGroups events-list API request failed - events will import without images this run.' );
-		return array();
-	}
-
-	$rows = json_decode( wp_remote_retrieve_body( $response ), true );
-	if ( ! is_array( $rows ) ) {
-		return array();
-	}
-
-	$photos = array();
-	foreach ( $rows as $row ) {
-		if ( empty( $row['fields'] ) ) {
-			continue;
-		}
-		$field_names = explode( ',', $row['fields'] );
-		$id_index    = array_search( 'eventId', $field_names, true );
-		$photo_index = array_search( 'eventPicture', $field_names, true );
-		if ( false === $id_index || false === $photo_index ) {
-			continue;
-		}
-		$event_id  = $row[ 'p' . $id_index ] ?? '';
-		$photo_url = $row[ 'p' . $photo_index ] ?? '';
-		if ( ! ctype_digit( (string) $event_id ) || empty( $photo_url ) ) {
-			continue;
-		}
-		$photos[ (int) $event_id ] = MYIGNITE_CG_HOST . $photo_url;
-	}
-
-	return $photos;
 }
 
 
@@ -413,14 +397,29 @@ function myignite_importer_find_backfill_post_id( $title, $start_date_local ) {
  * @return string Human-readable reason, or '' if the event is still live.
  */
 function myignite_importer_event_removed_at_source( $event ) {
-	if ( ! empty( $event['deleted'] ) ) {
+	if ( ! empty( $event['eventDelete'] ) ) {
 		return 'deleted on CampusGroups';
 	}
 	if ( ! empty( $event['draft'] ) ) {
 		return 'moved back to draft on CampusGroups';
 	}
-	if ( ( $event['approvalStatus'] ?? '' ) !== 'Approved' ) {
-		return 'no longer approved on CampusGroups (' . ( $event['approvalStatus'] ?? 'unknown status' ) . ')';
+
+	// Strict allow-list, not a guess at what to exclude: approvalStatus has
+	// no documented value legend beyond 1 = approved, confirmed repeatedly
+	// against the same real events' approvalStatus = "Approved" on the old
+	// Data Export API (Bursary, all 13 "Block Party" events, etc.). We do
+	// not know what other codes mean, and production must only ever import
+	// approved events - so anything except the one confirmed-good value,
+	// known or not, is treated as not approved. This mirrors exactly how the
+	// old string field was already handled: only the literal "Approved"
+	// passed, every other value failed closed with no carve-out.
+	$approval = (int) ( $event['approvalStatus'] ?? 0 );
+	if ( 1 !== $approval ) {
+		// Observability, not noise: every event seen so far reports 1, so a
+		// hit here should be rare - if a real non-1 code ever does occur,
+		// this is the first record of what it actually was.
+		myignite_importer_log( 'NOTE: event ' . ( $event['id'] ?? '?' ) . " reported approvalStatus={$approval} (only 1 is currently known to mean approved)." );
+		return 'not approved on CampusGroups (approvalStatus=' . $approval . ')';
 	}
 	return '';
 }
@@ -444,21 +443,18 @@ function myignite_importer_event_filtered_out( $event ) {
 		return 'its group is not ticked in the importer settings';
 	}
 
-	// Only publish events CampusGroups itself shows publicly.
+	// Only publish events CampusGroups itself shows publicly. publishCalendar
+	// is numeric (confirmed from the Data API's own documentation):
+	//   0 = Everyone, 1 = No one, 2 = registration-only,
+	//   3 = group members only, 4 = logged-on users only.
 	//
-	// Confirmed against real data: every event with
-	// whoCanSeeEventOnCalendar = "No one" is absent from the public events
-	// list (the mobile_ws feed), which is also our only source of images -
-	// so these events could never have a featured image, and they are not
-	// meant for a public audience in the first place (they also carry
-	// privacyLevel = "Some IGNITE Student Union users only").
-	//
-	// FAILS OPEN on purpose. If the key is missing entirely - because
-	// CampusGroups renamed or dropped it - we treat the event as visible
-	// rather than hidden. Only an explicit, non-"Everyone" value excludes.
-	if ( array_key_exists( 'whoCanSeeEventOnCalendar', $event )
-		&& 'Everyone' !== $event['whoCanSeeEventOnCalendar'] ) {
-		return 'not publicly visible (See Event on Calendar = "' . $event['whoCanSeeEventOnCalendar'] . '")';
+	// FAILS OPEN on purpose, same as before. If the key is missing entirely -
+	// because CampusGroups renamed or dropped it - we treat the event as
+	// visible rather than hidden. Only an explicit, non-zero value excludes.
+	if ( array_key_exists( 'publishCalendar', $event )
+		&& '' !== (string) $event['publishCalendar']
+		&& 0 !== (int) $event['publishCalendar'] ) {
+		return 'not publicly visible (Who can see this event on the calendar = code ' . $event['publishCalendar'] . ')';
 	}
 
 	return '';
@@ -473,57 +469,70 @@ function myignite_importer_event_should_import( $event ) {
 }
 
 /**
- * Organizers use shortDescription/description inconsistently - some
- * events have real content only in shortDescription with description
- * empty, and vice versa. content prefers the longer `description`;
- * excerpt prefers the (usually shorter, purpose-written) shortDescription,
- * trimmed since it is not always actually short.
+ * Organizers use description/fullDescription inconsistently - some events
+ * have real content only in one with the other empty, and vice versa.
+ * content prefers the longer `fullDescription`; excerpt prefers the
+ * (usually shorter, purpose-written) `description`, trimmed since it is not
+ * always actually short. Confirmed field-for-field against a live event
+ * (375533, "IGNITE Bursary Opens"): `description` here is an exact match for
+ * what the site already shows as the post excerpt.
  */
-function myignite_importer_build_event_fields( $event, $image_url ) {
-	$name        = trim( (string) ( $event['name'] ?? '' ) );
-	$short_desc  = trim( (string) ( $event['shortDescription'] ?? '' ) );
-	$description = trim( (string) ( $event['description'] ?? '' ) );
+function myignite_importer_build_event_fields( $event ) {
+	$name        = trim( (string) ( $event['title'] ?? '' ) );
+	$short_desc  = trim( (string) ( $event['description'] ?? '' ) );
+	$description = trim( (string) ( $event['fullDescription'] ?? '' ) );
 
 	$content = '' !== $description ? $description : $short_desc;
 	$excerpt_source = '' !== $short_desc ? $short_desc : $description;
 	$excerpt = '' !== $excerpt_source ? wp_trim_words( wp_strip_all_tags( $excerpt_source ), 30 ) : '';
 
 	$tz = wp_timezone();
-	$start_utc  = new DateTime( $event['startDate'], new DateTimeZone( 'UTC' ) );
-	$end_source = ! empty( $event['endDate'] ) ? $event['endDate'] : $event['startDate'];
-	$end_utc    = new DateTime( $end_source, new DateTimeZone( 'UTC' ) );
+	// eventStartDateTime/eventEndDateTime already carry an explicit UTC
+	// offset (e.g. "2026-10-13T09:00:00.0000000-04:00"), so unlike the old
+	// Data Export API's startDate/endDate there is no separate timezone
+	// field to combine them with.
+	$start_utc = new DateTime( $event['eventStartDateTime'] );
+	$start_utc->setTimezone( new DateTimeZone( 'UTC' ) );
+	$end_source = ! empty( $event['eventEndDateTime'] ) ? $event['eventEndDateTime'] : $event['eventStartDateTime'];
+	$end_utc = new DateTime( $end_source );
+	$end_utc->setTimezone( new DateTimeZone( 'UTC' ) );
 
 	$start_local = ( clone $start_utc )->setTimezone( $tz );
 	$end_local   = ( clone $end_utc )->setTimezone( $tz );
 
-	// locationType wins when it says the event is online. Confirmed against
-	// real data (event 375536, "New Club Application Deadline"): CampusGroups
-	// lets an organizer set locationType = "Online Only" while `address` still
-	// holds an unrelated on-campus room left over from before the event was
-	// switched to virtual - address is then not authoritative for where the
-	// event actually is. locationName is left as the one exception, since an
-	// organizer could legitimately use it for a Zoom link/description on an
-	// online event.
+	// eventLocation is already a clean, ready-to-display string from the
+	// Data API - including "Online Event" automatically for virtual events.
+	// The old Data Export API had no equivalent: it split location across
+	// locationName/address, and address was not authoritative once an event
+	// went virtual (confirmed: event 375536, "New Club Application
+	// Deadline" - locationType said "Online Only" while address still held
+	// a leftover physical room from before it was switched to virtual).
+	// locationType is kept only as a defensive fallback for the rare case
+	// eventLocation itself comes back blank.
 	$location_type = trim( (string) ( $event['locationType'] ?? '' ) );
-	$location_name = trim( (string) ( $event['locationName'] ?? '' ) );
-	$is_online     = false !== stripos( $location_type, 'online' );
-
-	if ( '' !== $location_name ) {
-		$location = $location_name;
-	} elseif ( $is_online ) {
+	$location      = trim( (string) ( $event['eventLocation'] ?? '' ) );
+	if ( '' === $location && false !== stripos( $location_type, 'virtual' ) ) {
 		$location = 'Online';
-	} else {
-		$location = trim( (string) ( $event['address'] ?? '' ) );
 	}
 
 	$tags = array();
-	foreach ( (array) ( $event['tags'] ?? array() ) as $tag ) {
-		if ( ! empty( $tag['name'] ) ) {
-			$tags[] = $tag['name'];
+	foreach ( explode( ',', (string) ( $event['eventTopics'] ?? '' ) ) as $topic ) {
+		$topic = trim( $topic );
+		if ( '' !== $topic ) {
+			$tags[] = $topic;
 		}
 	}
 
 	$group_id = (int) ( $event['groupId'] ?? 0 );
+
+	// The Data API hands us the true original upload directly - no more
+	// guessing between resize-prefix variants (see the retired
+	// myignite_importer_image_url_candidates()). Falls back to the
+	// non-original URL only if the original is somehow blank.
+	$image_url = trim( (string) ( $event['eventOriginalPhotoFullUrl'] ?? '' ) );
+	if ( '' === $image_url ) {
+		$image_url = trim( (string) ( $event['eventPhotoFullUrl'] ?? '' ) );
+	}
 
 	$fields = array(
 		'title'       => $name,
@@ -535,12 +544,12 @@ function myignite_importer_build_event_fields( $event, $image_url ) {
 		'end_utc'     => $end_utc->format( 'Y-m-d H:i:s' ),
 		'timezone'    => $tz->getName(),
 		'location'    => $location,
-		'website'     => MYIGNITE_CG_HOST . '/rsvp?id=' . (int) $event['id'],
-		// known_groups(), not the constant: a group added via the settings
-		// page must resolve to its name here too, or its events would import
-		// with a blank category/organizer.
+		'website'     => trim( (string) ( $event['eventLink'] ?? '' ) ),
+		// known_groups(), not the API's own `group` name: a group added via
+		// the settings page must resolve to its configured display name
+		// here too, or its events would import with a blank category/organizer.
 		'category'    => myignite_importer_known_groups()[ $group_id ] ?? '',
-		'event_type'  => trim( (string) ( $event['type']['value'] ?? '' ) ),
+		'event_type'  => trim( (string) ( $event['eventType'] ?? '' ) ),
 		'tags'        => $tags,
 		'image_url'   => $image_url,
 	);
@@ -556,53 +565,16 @@ function myignite_importer_build_event_fields( $event, $image_url ) {
 // -----------------------------------------------------------------------
 
 /**
- * Builds the list of image URLs to try, best quality first.
+ * Downloads and sets the featured image, if the source URL has changed
+ * since the last run.
  *
- * CampusGroups' events-list API always reports the "r2_" variant of an
- * event photo, which is a downscaled 640x320 copy - noticeably soft once the
- * theme renders it at full width. The same file exists at other prefixes,
- * confirmed by measuring a real event photo:
- *
- *     r1_<name>   320x160    13 KB
- *     r2_<name>   640x320    43 KB   <- what the API hands us
- *     r3_<name>  1280x640   193 KB
- *        <name>  1280x640   223 KB   <- original upload, best quality
- *
- * So we strip the prefix to reach the original, keep r3_ as a same-resolution
- * fallback, and finally fall back to the URL the API actually gave us, which
- * is guaranteed to exist. Only the filename is rewritten - the directory can
- * itself contain "r2_"-like segments and must not be touched.
- *
- * @param string $api_url Full URL as reported by the events-list API.
- * @return string[] Candidate URLs, highest quality first.
+ * $image_url is eventOriginalPhotoFullUrl straight from the Data API (see
+ * myignite_importer_build_event_fields()) - the true original upload, no
+ * resize-variant guessing needed (the old mobile_ws-based pipeline only ever
+ * reported a downscaled "r2_" copy, which is what
+ * myignite_importer_image_url_candidates() used to work around; that
+ * function and the guessing it did are gone along with it).
  */
-function myignite_importer_image_url_candidates( $api_url ) {
-	$path = wp_parse_url( $api_url, PHP_URL_PATH );
-	if ( ! $path ) {
-		return array( $api_url );
-	}
-
-	$dir  = dirname( $path );
-	$file = basename( $path );
-
-	if ( ! preg_match( '/^r(\d+)_(.+)$/', $file, $m ) ) {
-		return array( $api_url ); // Unrecognised shape - use as-is.
-	}
-
-	$bare   = $m[2];
-	$scheme = wp_parse_url( $api_url, PHP_URL_SCHEME ) ?: 'https';
-	$host   = wp_parse_url( $api_url, PHP_URL_HOST );
-	$prefix = $scheme . '://' . $host . $dir . '/';
-
-	$candidates = array(
-		$prefix . $bare,          // original upload
-		$prefix . 'r3_' . $bare,  // largest generated variant
-		$api_url,                 // whatever the API said (always exists)
-	);
-
-	return array_values( array_unique( $candidates ) );
-}
-
 function myignite_importer_maybe_update_featured_image( $post_id, $image_url ) {
 	if ( empty( $image_url ) ) {
 		return 'no image available from CampusGroups';
@@ -626,25 +598,9 @@ function myignite_importer_maybe_update_featured_image( $post_id, $image_url ) {
 	$ext      = strtolower( pathinfo( strtok( $image_url, '?' ), PATHINFO_EXTENSION ) ) ?: 'jpg';
 	$filename = sanitize_title( get_the_title( $post_id ) ) . '_myignite_import.' . $ext;
 
-	// Walk candidates best-quality-first and take the first that downloads.
-	// The final candidate is the URL the API gave us, so this can only fail
-	// if the image is genuinely unreachable.
-	$tmp        = null;
-	$downloaded = '';
-	$errors     = array();
-
-	foreach ( myignite_importer_image_url_candidates( $image_url ) as $candidate ) {
-		$attempt = download_url( $candidate );
-		if ( ! is_wp_error( $attempt ) ) {
-			$tmp        = $attempt;
-			$downloaded = $candidate;
-			break;
-		}
-		$errors[] = basename( $candidate ) . ': ' . $attempt->get_error_message();
-	}
-
-	if ( null === $tmp ) {
-		return 'ERROR downloading image - ' . implode( ' | ', $errors );
+	$tmp = download_url( $image_url );
+	if ( is_wp_error( $tmp ) ) {
+		return 'ERROR downloading image - ' . $tmp->get_error_message();
 	}
 
 	$attachment_id = media_handle_sideload( array( 'name' => $filename, 'tmp_name' => $tmp ), $post_id );
@@ -654,12 +610,12 @@ function myignite_importer_maybe_update_featured_image( $post_id, $image_url ) {
 	}
 
 	set_post_thumbnail( $post_id, $attachment_id );
-	// Store the API-reported URL for change detection (that is what the next
-	// run will compare against) and the resolved one for traceability.
+	// Store the API-reported URL for change detection - that is what the
+	// next run will compare against.
 	update_post_meta( $post_id, '_myignite_source_image_url', $image_url );
-	update_post_meta( $attachment_id, '_myignite_source_url', $downloaded );
+	update_post_meta( $attachment_id, '_myignite_source_url', $image_url );
 
-	return ( $downloaded === $image_url ) ? 'updated' : 'updated (upgraded to ' . basename( $downloaded ) . ')';
+	return 'updated';
 }
 
 
@@ -667,7 +623,7 @@ function myignite_importer_maybe_update_featured_image( $post_id, $image_url ) {
 // PER-EVENT SYNC
 // -----------------------------------------------------------------------
 
-function myignite_importer_sync_single_event( $event, $photos, $dry_run ) {
+function myignite_importer_sync_single_event( $event, $dry_run ) {
 	$cg_id = (int) ( $event['id'] ?? 0 );
 	if ( ! $cg_id ) {
 		myignite_importer_log( 'Skipped a record with no id - unparseable response row.' );
@@ -710,21 +666,20 @@ function myignite_importer_sync_single_event( $event, $photos, $dry_run ) {
 		return 'skipped';
 	}
 
-	$photo_url = $photos[ $cg_id ] ?? '';
-	$fields    = myignite_importer_build_event_fields( $event, $photo_url );
+	$fields = myignite_importer_build_event_fields( $event );
 
 	// Adoption by title + start date, for events not yet tagged with a
 	// CampusGroups ID. This is DELIBERATE and load-bearing - do not remove it
 	// as a "safety" measure (it was removed once for exactly that reason and
 	// had to be restored).
 	//
-	// The workflow it supports: CampusGroups' Data Export API is fed by a
-	// batch job on their side, so an event created there today generally is
-	// not visible to this importer until tomorrow. When something needs to be
-	// live on the website immediately, staff create it by hand in wp-admin
-	// using the SAME title and start time as the CampusGroups event. On the
-	// next sync it is adopted rather than duplicated, and from then on
-	// CampusGroups is the source of truth for it.
+	// The workflow it supports: the sync only runs once a day, so an event
+	// created on CampusGroups today isn't visible on the website until the
+	// next scheduled run at the earliest, even with the near-real-time Data
+	// API. When something needs to be live immediately, staff create it by
+	// hand in wp-admin using the SAME title and start time as the
+	// CampusGroups event. On the next sync it is adopted rather than
+	// duplicated, and from then on CampusGroups is the source of truth for it.
 	//
 	// The tradeoff, accepted knowingly: a hand-made event that coincidentally
 	// shares BOTH an exact title and an exact start time with a CampusGroups
@@ -742,14 +697,14 @@ function myignite_importer_sync_single_event( $event, $photos, $dry_run ) {
 	if ( $existing_id ) {
 		$stored_hash = get_post_meta( $existing_id, '_myignite_source_hash', true );
 		if ( $stored_hash === $fields['hash'] ) {
-			// Core event data is unchanged, but the image comes from a
-			// separate, narrower "upcoming events" feed that a far-future
-			// event may not have been listed in yet when first imported -
-			// retry it independently of the hash so a photo that becomes
-			// available later still gets picked up, instead of being
-			// skipped forever alongside the unchanged core data.
-			if ( ! $dry_run && $photo_url && ! get_post_thumbnail_id( $existing_id ) ) {
-				$image_status = myignite_importer_maybe_update_featured_image( $existing_id, $photo_url );
+			// Core event data is unchanged, but a first-attempt image
+			// download/sideload can fail on its own (network hiccup, a
+			// momentarily unreachable URL) independently of everything else
+			// being fine - retry it on every skip so a failed download
+			// doesn't stay missing forever alongside otherwise-unchanged
+			// core data.
+			if ( ! $dry_run && $fields['image_url'] && ! get_post_thumbnail_id( $existing_id ) ) {
+				$image_status = myignite_importer_maybe_update_featured_image( $existing_id, $fields['image_url'] );
 				myignite_importer_log( "Event {$cg_id} (post {$existing_id}): skipped - no change since last sync. Image backfill: {$image_status}." );
 			} else {
 				myignite_importer_log( "Event {$cg_id} (post {$existing_id}): skipped - no change since last sync." );
@@ -812,7 +767,7 @@ function myignite_importer_sync_single_event( $event, $photos, $dry_run ) {
 		wp_set_object_terms( $post_id, $fields['tags'], 'post_tag', false );
 	}
 
-	$image_status = myignite_importer_maybe_update_featured_image( $post_id, $photo_url );
+	$image_status = myignite_importer_maybe_update_featured_image( $post_id, $fields['image_url'] );
 
 	myignite_importer_log( "Event {$cg_id} (post {$post_id}): " . ( $is_new ? 'created' : 'updated' ) . ". Image: {$image_status}." );
 
@@ -851,20 +806,19 @@ function myignite_sync_events( $options = array() ) {
 		return false;
 	}
 
-	// The API window is on updatedOn, which is NOT the event date. An event
-	// happening next month may not have been edited in a year, so an
-	// incremental updatedOn window would never surface it. We always pull a
-	// wide window and do the real filtering on event date below. This also
-	// retires the incremental checkpoint that previously let a truncated run
-	// skip events permanently.
-	$updated_end   = gmdate( 'Y-m-d\TH:i:s\Z' );
-	$updated_start = ! empty( $options['since'] )
-		? $options['since']
-		: gmdate( 'Y-m-d\TH:i:s\Z', strtotime( '-2 years' ) );
+	// The Data API answers from CampusGroups' live database directly - unlike
+	// the old Data Export API there is no batch snapshot to window around, so
+	// we always pull broadly (time_range=all, inside
+	// myignite_importer_data_api_fetch_events()) and do the real filtering on
+	// event date below, exactly as before.
+	$fetch_args = array();
+	if ( ! empty( $options['since'] ) ) {
+		// Optional scoping, kept for parity with the old --since flag: only
+		// ask for events CampusGroups has touched since this time.
+		$fetch_args['updated_after'] = $options['since'];
+	}
 
-	myignite_importer_log( "Querying CampusGroups for events updated between {$updated_start} and {$updated_end}." );
-
-	$events = myignite_importer_cg_data_api_fetch_all( 'events', $updated_start, $updated_end );
+	$events = myignite_importer_data_api_fetch_events( $fetch_args );
 	if ( is_wp_error( $events ) ) {
 		$msg = $events->get_error_message();
 		myignite_importer_log( 'ERROR fetching events - ' . $msg );
@@ -877,14 +831,14 @@ function myignite_sync_events( $options = array() ) {
 		);
 		return false;
 	}
-	myignite_importer_log( 'CampusGroups returned ' . count( $events ) . ' updated event record(s) in this window (before group filtering).' );
+	myignite_importer_log( 'CampusGroups returned ' . count( $events ) . ' event record(s) (before group filtering).' );
 
 	// Event-date filter. Anything outside the window is dropped here, so it is
 	// never created, never updated, and never trashed - an event that simply
 	// aged into the past is left exactly as it is.
 	$before = count( $events );
 	$events = array_values( array_filter( $events, static function ( $event ) use ( $start_min, $start_max, $inclusive ) {
-		$start = isset( $event['startDate'] ) ? strtotime( $event['startDate'] ) : false;
+		$start = ! empty( $event['eventStartDateTime'] ) ? strtotime( $event['eventStartDateTime'] ) : false;
 		if ( ! $start ) {
 			return false;
 		}
@@ -902,9 +856,6 @@ function myignite_sync_events( $options = array() ) {
 		count( $events ), $before, $before - count( $events )
 	) );
 
-	$photos = myignite_importer_fetch_event_photos();
-	myignite_importer_log( 'CampusGroups events-list API returned photos for ' . count( $photos ) . ' event(s).' );
-
 	$counts    = array( 'created' => 0, 'updated' => 0, 'skipped' => 0, 'trashed' => 0, 'error' => 0 );
 	$processed = 0;
 
@@ -917,7 +868,7 @@ function myignite_sync_events( $options = array() ) {
 			break;
 		}
 		$processed++;
-		$result = myignite_importer_sync_single_event( $event, $photos, $dry_run );
+		$result = myignite_importer_sync_single_event( $event, $dry_run );
 		if ( isset( $counts[ $result ] ) ) {
 			$counts[ $result ]++;
 		}
@@ -957,10 +908,11 @@ function myignite_sync_events( $options = array() ) {
 // -----------------------------------------------------------------------
 // WP-CRON: once daily at 6:00 PM Toronto
 //
-// Deliberately once a day, not more: CampusGroups' Data Export API is fed by
-// a batch job on their side, so polling it more often returns the same data
-// and gains nothing. 6:00 PM local was chosen so a day's edits are picked up
-// after business hours.
+// Kept at once a day for now even though the Data API (unlike the old Data
+// Export API) has no batch lag that would make more-frequent polling
+// pointless - increasing this is a separate, deliberate follow-up, not a
+// side effect of the API migration. 6:00 PM local was chosen so a day's
+// edits are picked up after business hours.
 //
 // Note this is 6:00 PM *Toronto*, pinned to America/Toronto explicitly rather
 // than the site's timezone setting, so it does not silently drift by an hour
