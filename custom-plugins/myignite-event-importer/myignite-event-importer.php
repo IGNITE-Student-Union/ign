@@ -565,6 +565,42 @@ function myignite_importer_build_event_fields( $event ) {
 // -----------------------------------------------------------------------
 
 /**
+ * Finds an already-imported attachment for this exact source URL, from any
+ * event - not just this one. Organizers frequently reuse the same stock
+ * photo across many event instances (confirmed: e.g. every "Block Party"
+ * date across North/Lakeshore/UofGH/Downtown shares one identical image),
+ * so without this check the same file gets downloaded and sideloaded again
+ * for every single instance, bloating the media library with byte-for-byte
+ * duplicates of the same picture.
+ *
+ * Deliberately raw $wpdb, consistent with the rest of this file's postmeta
+ * lookups - a plain "find an attachment by this meta value" query, nothing
+ * WP_Query's post-type/status assumptions would add value to here.
+ *
+ * @return int Attachment ID if a still-valid one is found, else 0.
+ */
+function myignite_importer_find_existing_attachment_by_url( $image_url ) {
+	global $wpdb;
+	$attachment_id = (int) $wpdb->get_var( $wpdb->prepare(
+		"SELECT pm.post_id FROM {$wpdb->postmeta} pm
+		 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+		 WHERE pm.meta_key = '_myignite_source_url'
+		   AND pm.meta_value = %s
+		   AND p.post_type = 'attachment'
+		 ORDER BY pm.post_id DESC
+		 LIMIT 1",
+		$image_url
+	) );
+
+	// Guard against reusing a reference whose actual file went missing -
+	// fall through to a fresh download rather than setting a broken thumbnail.
+	if ( $attachment_id && file_exists( (string) get_attached_file( $attachment_id ) ) ) {
+		return $attachment_id;
+	}
+	return 0;
+}
+
+/**
  * Downloads and sets the featured image, if the source URL has changed
  * since the last run.
  *
@@ -583,6 +619,13 @@ function myignite_importer_maybe_update_featured_image( $post_id, $image_url ) {
 	$stored_url = get_post_meta( $post_id, '_myignite_source_image_url', true );
 	if ( $stored_url === $image_url && has_post_thumbnail( $post_id ) ) {
 		return 'unchanged, skipped re-download';
+	}
+
+	$existing_attachment_id = myignite_importer_find_existing_attachment_by_url( $image_url );
+	if ( $existing_attachment_id ) {
+		set_post_thumbnail( $post_id, $existing_attachment_id );
+		update_post_meta( $post_id, '_myignite_source_image_url', $image_url );
+		return 'reused existing attachment ' . $existing_attachment_id . ' (same image already imported for another event)';
 	}
 
 	if ( ! function_exists( 'media_handle_sideload' ) ) {
