@@ -141,3 +141,30 @@ jobs:
           REMOTE_PATH: "wp-content/plugins/myignite-event-importer/"
           FLAGS: -azvr --inplace --delete --exclude=.git
           CACHE_CLEAR: TRUE
+
+  deploy-plugin-drop-originals:
+    name: Deploy → Drop Original Images plugin
+    # Serialised after the other plugin deploy for the same reason that one is
+    # serialised after the theme: WP Engine's SSH gateway refuses a second
+    # concurrent session.
+    needs: deploy-plugin-myignite-importer
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment:
+      name: production
+      url: https://ignitestudentu.wpengine.com
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: built-theme
+
+      - name: Deploy plugin to WPEngine Production
+        uses: wpengine/github-action-wpe-site-deploy@v3
+        with:
+          WPE_SSHG_KEY_PRIVATE: ${{ secrets.WPE_SSHG_KEY_PRIVATE }}
+          WPE_ENV: ignitestudentu
+          SRC_PATH: "custom-plugins/ignite-drop-originals/"
+          REMOTE_PATH: "wp-content/plugins/ignite-drop-originals/"
+          FLAGS: -azvr --inplace --delete --exclude=.git
+          CACHE_CLEAR: TRUE
