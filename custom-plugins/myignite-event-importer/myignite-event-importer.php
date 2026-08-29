@@ -718,28 +718,66 @@ function myignite_importer_sync_single_event( $event, $dry_run ) {
 		return $existing_id ? 'updated' : 'created';
 	}
 
-	$args = array(
-		'post_title'     => $fields['title'],
-		'post_content'   => $fields['content'],
-		'post_excerpt'   => $fields['excerpt'],
-		'post_status'    => 'publish',
-		'EventStartDate' => substr( $fields['start_local'], 0, 10 ),
-		'EventStartTime' => substr( $fields['start_local'], 11 ),
-		'EventEndDate'   => substr( $fields['end_local'], 0, 10 ),
-		'EventEndTime'   => substr( $fields['end_local'], 11 ),
-		'EventTimezone'  => $fields['timezone'],
-		'EventURL'       => $fields['website'],
+	// Neither the legacy tribe_create_event()/tribe_update_event() nor the
+	// modern ORM's own update path (tribe_events()->where()->set()->save() -
+	// TEC's own acknowledged bug: "the event repository returning NULL when
+	// trying to update") reliably writes the wp_tec_occurrences row this
+	// site's calendar views actually read from. Confirmed live, repeatedly,
+	// on 2026-08-29: both created a real, correctly-populated post - but no
+	// occurrence row, so the event was published yet invisible everywhere on
+	// the site. Ruled out caching and a stale plugin-hook registration (a
+	// full WP Engine cache clear and a TEC/Events Calendar Pro
+	// deactivate+reactivate were both tried first, live, and neither fixed
+	// it) - tribe_events_event_save, the hook createEvent()/updateEvent()
+	// fire to trigger occurrence generation, has zero listeners on this
+	// install. Only the ORM's create() path was confirmed (tested live
+	// against a throwaway event, then cleaned up) to reliably generate a
+	// working occurrence row here. Since no update path works, every content
+	// change goes through trash-then-recreate via create() instead of an
+	// in-place update.
+	//
+	// No 'venue'/'organizer' key passed - see _myignite_venue_name below.
+	// Passing one is what would make TEC auto-create a linked tribe_venue
+	// post, which the site's display templates deliberately do not use.
+	$orm_args = array(
+		'title'      => $fields['title'],
+		'content'    => $fields['content'],
+		'excerpt'    => $fields['excerpt'],
+		'status'     => 'publish',
+		'start_date' => $fields['start_local'],
+		'end_date'   => $fields['end_local'],
+		'timezone'   => $fields['timezone'],
+		'url'        => $fields['website'],
 	);
 
-	$is_new = ! $existing_id;
-	// No 'Venue' key passed - see _myignite_venue_name below. Passing
-	// one here is what makes TEC auto-create a linked tribe_venue post,
-	// which the site's display templates deliberately do not use.
-	$post_id = $is_new ? tribe_create_event( $args ) : tribe_update_event( $existing_id, $args );
+	$is_new           = ! $existing_id;
+	$old_thumbnail_id = 0;
+	$old_image_url    = '';
 
-	if ( is_wp_error( $post_id ) || ! $post_id ) {
-		$msg = is_wp_error( $post_id ) ? $post_id->get_error_message() : 'tribe_create_event()/tribe_update_event() returned no post ID';
-		myignite_importer_log( "Event {$cg_id}: ERROR - {$msg}" );
+	if ( $existing_id ) {
+		$old_post = get_post( $existing_id );
+		if ( $old_post && $old_post->post_name ) {
+			// Best-effort URL stability: ask for the same slug the trashed
+			// post had. WordPress frees a trashed post's slug for reuse, so
+			// this normally succeeds; if something else has since claimed
+			// it, WordPress falls back to its usual auto-suffixed slug.
+			$orm_args['post_name'] = $old_post->post_name;
+		}
+		$old_thumbnail_id = (int) get_post_thumbnail_id( $existing_id );
+		$old_image_url    = get_post_meta( $existing_id, '_myignite_source_image_url', true );
+
+		wp_trash_post( $existing_id );
+	}
+
+	try {
+		$created = tribe_events()->set_args( $orm_args )->create();
+	} catch ( \Throwable $t ) {
+		$created = false;
+	}
+	$post_id = ( $created instanceof WP_Post ) ? $created->ID : 0;
+
+	if ( ! $post_id ) {
+		myignite_importer_log( "Event {$cg_id}: ERROR - tribe_events()->set_args()->create() did not return a post." );
 		return 'error';
 	}
 
@@ -767,9 +805,17 @@ function myignite_importer_sync_single_event( $event, $dry_run ) {
 		wp_set_object_terms( $post_id, $fields['tags'], 'post_tag', false );
 	}
 
-	$image_status = myignite_importer_maybe_update_featured_image( $post_id, $fields['image_url'] );
+	if ( $old_thumbnail_id && $old_image_url === $fields['image_url'] ) {
+		// Image hasn't changed - reuse the existing attachment under the new
+		// post ID instead of re-downloading it.
+		set_post_thumbnail( $post_id, $old_thumbnail_id );
+		update_post_meta( $post_id, '_myignite_source_image_url', $old_image_url );
+		$image_status = 'unchanged, skipped re-download';
+	} else {
+		$image_status = myignite_importer_maybe_update_featured_image( $post_id, $fields['image_url'] );
+	}
 
-	myignite_importer_log( "Event {$cg_id} (post {$post_id}): " . ( $is_new ? 'created' : 'updated' ) . ". Image: {$image_status}." );
+	myignite_importer_log( "Event {$cg_id} (post {$post_id}): " . ( $is_new ? 'created' : 'updated (recreated as new post - see comment above)' ) . ". Image: {$image_status}." );
 
 	return $is_new ? 'created' : 'updated';
 }
