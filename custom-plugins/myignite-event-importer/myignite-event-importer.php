@@ -484,7 +484,7 @@ function myignite_importer_build_event_fields( $event ) {
 
 	$content = '' !== $description ? $description : $short_desc;
 	$excerpt_source = '' !== $short_desc ? $short_desc : $description;
-	$excerpt = '' !== $excerpt_source ? wp_trim_words( wp_strip_all_tags( $excerpt_source ), 30 ) : '';
+	$excerpt = '' !== $excerpt_source ? wp_trim_words( wp_strip_all_tags( $excerpt_source ), 55 ) : '';
 
 	$tz = wp_timezone();
 	// eventStartDateTime/eventEndDateTime already carry an explicit UTC
