@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: MyIGNITE Event Importer
- * Description: Imports events from MyIGNITE (CampusGroups) via the CampusGroups Data API (rss_events), replacing the Event Aggregator ICS pipeline for The Events Calendar. <strong>Runs automatically once a day at 6:00 PM Toronto time.</strong> Manual run: <code>wp myignite sync-events</code> (add <code>--dry-run</code> to preview). Activity log: <code>wp-content/myignite-event-sync.log</code>. Note: the Data API answers from CampusGroups' live database directly (confirmed: an event created there is visible here within seconds), unlike the old Data Export API this plugin used until 2026-08-28, which was fed by a batch job roughly 18-30 hours behind live. Requires MYIGNITE_CG_SCHOOL_CODE / MYIGNITE_CG_API_SECRET in wp-content/mu-plugins.
+ * Description: Imports events from MyIGNITE (CampusGroups) via the CampusGroups Data API (rss_events), replacing the Event Aggregator ICS pipeline for The Events Calendar. <strong>Runs automatically five times a day &mdash; at 10 AM, 12 PM, 2 PM, 4 PM and 6 PM Toronto time.</strong> Manual run: <code>wp myignite sync-events</code> (add <code>--dry-run</code> to preview). Activity log: <code>wp-content/myignite-event-sync.log</code>. Note: the Data API answers from CampusGroups' live database directly (confirmed: an event created there is visible here within seconds), unlike the old Data Export API this plugin used until 2026-08-28, which was fed by a batch job roughly 18-30 hours behind live. Requires MYIGNITE_CG_SCHOOL_CODE / MYIGNITE_CG_API_SECRET in wp-content/mu-plugins.
  * Version: 1.0.0
  */
 
@@ -716,10 +716,11 @@ function myignite_importer_sync_single_event( $event, $dry_run ) {
 	// as a "safety" measure (it was removed once for exactly that reason and
 	// had to be restored).
 	//
-	// The workflow it supports: the sync only runs once a day, so an event
-	// created on CampusGroups today isn't visible on the website until the
-	// next scheduled run at the earliest, even with the near-real-time Data
-	// API. When something needs to be live immediately, staff create it by
+	// The workflow it supports: the sync only runs on a schedule (a handful
+	// of times a day), so an event created on CampusGroups now isn't visible
+	// on the website until the next scheduled run at the earliest, even with
+	// the near-real-time Data API. When something needs to be live
+	// immediately, staff create it by
 	// hand in wp-admin using the SAME title and start time as the
 	// CampusGroups event. On the next sync it is adopted rather than
 	// duplicated, and from then on CampusGroups is the source of truth for it.
@@ -995,80 +996,126 @@ function myignite_sync_events( $options = array() ) {
 
 
 // -----------------------------------------------------------------------
-// WP-CRON: once daily at 6:00 PM Toronto
+// WP-CRON: five times a day at 10 AM, 12 PM, 2 PM, 4 PM and 6 PM Toronto
 //
-// Kept at once a day for now even though the Data API (unlike the old Data
-// Export API) has no batch lag that would make more-frequent polling
-// pointless - increasing this is a separate, deliberate follow-up, not a
-// side effect of the API migration. 6:00 PM local was chosen so a day's
-// edits are picked up after business hours.
+// The Data API (unlike the old Data Export API) answers straight from
+// CampusGroups' live database with no batch lag, so polling through the day
+// surfaces a club's edits within a couple of hours instead of only after the
+// single after-hours run. The evening slot is kept so a full day's edits are
+// still swept up once business is over.
 //
-// Note this is 6:00 PM *Toronto*, pinned to America/Toronto explicitly rather
-// than the site's timezone setting, so it does not silently drift by an hour
-// at daylight-saving changeovers.
+// The hours below are Toronto wall-clock, pinned to America/Toronto
+// explicitly rather than the site's timezone setting, so they do not
+// silently drift by an hour at daylight-saving changeovers.
+//
+// Implemented as one once-a-day event per run hour on the same hook, each
+// anchored to its own time of day, rather than a single sub-daily interval:
+// the run times are not evenly spaced (2 h apart through the day, then 16 h
+// overnight), so no one fixed interval reproduces them.
 // -----------------------------------------------------------------------
+
+// Bump whenever myignite_importer_run_hours() changes, so an install that
+// already registered the cron tears down its old schedule and rebuilds on
+// the new set of times (see myignite_importer_maybe_reschedule()).
+define( 'MYIGNITE_IMPORTER_SCHEDULE_VERSION', '2026-09-01-5x-daily' );
 
 add_filter( 'cron_schedules', 'myignite_importer_cron_schedules' );
 function myignite_importer_cron_schedules( $schedules ) {
-	$schedules['myignite_daily_6pm'] = array(
+	$schedules['myignite_daily'] = array(
 		'interval' => DAY_IN_SECONDS,
-		'display'  => 'Once daily at 6:00 PM Toronto (MyIGNITE event import)',
+		'display'  => 'Once a day (MyIGNITE event import time slot)',
 	);
 	return $schedules;
 }
 
 /**
- * Timestamp of the next 6:00 PM in Toronto. Used as the cron's anchor so the
- * daily interval lands at that wall-clock time rather than 24h after whenever
- * the plugin happened to be activated.
+ * The Toronto wall-clock hours (0-23) the sync runs at, every day.
  *
- * @return int Unix timestamp.
+ * @return int[]
  */
-function myignite_importer_next_6pm_toronto() {
-	$tz   = new DateTimeZone( 'America/Toronto' );
-	$now  = new DateTime( 'now', $tz );
-	$next = new DateTime( 'today 18:00', $tz );
-	if ( $next <= $now ) {
-		$next->modify( '+1 day' );
+function myignite_importer_run_hours() {
+	return array( 10, 12, 14, 16, 18 );
+}
+
+/**
+ * Human-readable list of the run times, e.g. "10 AM, 12 PM, 2 PM, 4 PM and
+ * 6 PM Toronto time". Used verbatim on the settings screen.
+ *
+ * @return string
+ */
+function myignite_importer_schedule_label() {
+	$parts = array();
+	foreach ( myignite_importer_run_hours() as $hour ) {
+		$suffix = $hour < 12 ? 'AM' : 'PM';
+		$h12    = $hour % 12;
+		if ( 0 === $h12 ) {
+			$h12 = 12;
+		}
+		$parts[] = $h12 . ' ' . $suffix;
 	}
-	return $next->getTimestamp();
+	$last = array_pop( $parts );
+	return ( $parts ? implode( ', ', $parts ) . ' and ' : '' ) . $last . ' Toronto time';
+}
+
+/**
+ * Next future Unix timestamp for each run hour in America/Toronto. Used as
+ * the cron anchors so each daily interval lands on that wall-clock time
+ * rather than 24h after whenever the plugin happened to be (re)scheduled.
+ *
+ * @return int[]
+ */
+function myignite_importer_next_run_timestamps() {
+	$tz  = new DateTimeZone( 'America/Toronto' );
+	$now = new DateTime( 'now', $tz );
+	$out = array();
+	foreach ( myignite_importer_run_hours() as $hour ) {
+		$next = new DateTime( 'today', $tz );
+		$next->setTime( $hour, 0, 0 );
+		if ( $next <= $now ) {
+			$next->modify( '+1 day' );
+		}
+		$out[] = $next->getTimestamp();
+	}
+	return $out;
+}
+
+/**
+ * Clears every scheduled instance of the sync hook and re-creates one
+ * once-a-day event per run hour. wp_schedule_event() does no duplicate
+ * detection, so the five same-hook events coexist happily.
+ */
+function myignite_importer_reschedule_all() {
+	wp_clear_scheduled_hook( MYIGNITE_IMPORTER_CRON_HOOK );
+	foreach ( myignite_importer_next_run_timestamps() as $ts ) {
+		wp_schedule_event( $ts, 'myignite_daily', MYIGNITE_IMPORTER_CRON_HOOK );
+	}
+	update_option( 'myignite_importer_schedule_version', MYIGNITE_IMPORTER_SCHEDULE_VERSION );
 }
 
 register_activation_hook( __FILE__, 'myignite_importer_activate' );
 function myignite_importer_activate() {
-	if ( ! wp_next_scheduled( MYIGNITE_IMPORTER_CRON_HOOK ) ) {
-		wp_schedule_event( myignite_importer_next_6pm_toronto(), 'myignite_daily_6pm', MYIGNITE_IMPORTER_CRON_HOOK );
-	}
+	myignite_importer_reschedule_all();
 }
 
 /**
- * Moves an already-scheduled sync onto the current schedule/anchor if it is
- * still running on an older one (e.g. the original every-8-hours schedule).
- * Without this, changing the constants above would have no effect on an
- * install where the event was already registered - WP-Cron keeps whatever
- * interval it was first scheduled with.
+ * Migrates an already-scheduled sync onto the current set of run times when
+ * it is still running on an older one - the original every-8-hours schedule,
+ * or the single daily 6 PM event. Without this, changing the run hours above
+ * would have no effect on an install where the event was already registered:
+ * WP-Cron keeps whatever it was first scheduled with.
  */
 add_action( 'init', 'myignite_importer_maybe_reschedule' );
 function myignite_importer_maybe_reschedule() {
-	$scheduled = wp_get_scheduled_event( MYIGNITE_IMPORTER_CRON_HOOK );
-
-	if ( $scheduled && 'myignite_daily_6pm' === $scheduled->schedule ) {
+	if ( get_option( 'myignite_importer_schedule_version' ) === MYIGNITE_IMPORTER_SCHEDULE_VERSION ) {
 		return; // Already on the intended schedule.
 	}
-
-	if ( $scheduled ) {
-		wp_unschedule_event( $scheduled->timestamp, MYIGNITE_IMPORTER_CRON_HOOK );
-	}
-
-	wp_schedule_event( myignite_importer_next_6pm_toronto(), 'myignite_daily_6pm', MYIGNITE_IMPORTER_CRON_HOOK );
+	myignite_importer_reschedule_all();
 }
 
 register_deactivation_hook( __FILE__, 'myignite_importer_deactivate' );
 function myignite_importer_deactivate() {
-	$timestamp = wp_next_scheduled( MYIGNITE_IMPORTER_CRON_HOOK );
-	if ( $timestamp ) {
-		wp_unschedule_event( $timestamp, MYIGNITE_IMPORTER_CRON_HOOK );
-	}
+	wp_clear_scheduled_hook( MYIGNITE_IMPORTER_CRON_HOOK );
+	delete_option( 'myignite_importer_schedule_version' );
 }
 
 add_action( MYIGNITE_IMPORTER_CRON_HOOK, 'myignite_sync_events' );

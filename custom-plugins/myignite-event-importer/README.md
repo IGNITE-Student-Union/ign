@@ -64,13 +64,13 @@ All times are **Toronto time**. Daylight saving is applied automatically via
 `DateTimeZone('America/Toronto')` — 6:00 PM is 6:00 PM in both EDT and EST, and
 there is nothing to adjust twice a year. Administrators never deal with UTC.
 
-Leaving both dates at their defaults does exactly what the daily run does.
+Leaving both dates at their defaults does exactly what each scheduled run does.
 
 ## What runs, and when
 
 | What | When |
 |---|---|
-| `myignite_event_sync_event` (WP-Cron) | Once daily, **6:00 PM Toronto** |
+| `myignite_event_sync_event` (WP-Cron) | Five times a day — **10 AM, 12 PM, 2 PM, 4 PM, 6 PM Toronto** |
 | `wp myignite sync-events` | On demand (add `--dry-run` to preview) |
 | **Run import now** button | On demand, from the settings screen |
 
@@ -84,9 +84,9 @@ create/update/trash decision is made, so it simply stays as it is.
 **Freshness:** the Data API answers from CampusGroups' live database directly
 — confirmed live (create an event, query seconds later, it's already there).
 Unlike the old Data Export API (used until 2026-08-28), there is no batch job
-lag to wait out. The schedule is still once a day for now regardless —
-increasing it is a deliberate separate change, not automatic just because the
-source got faster.
+lag to wait out. The sync runs five times a day (10 AM, 12 PM, 2 PM, 4 PM and
+6 PM Toronto), so a club's edits usually reach the website within about two
+hours during the day; the evening slot still sweeps up the full day.
 
 The hand-authored-adoption workflow below still works and is still the
 fastest path if something needs to be live before the next scheduled run:

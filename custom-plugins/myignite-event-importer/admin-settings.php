@@ -78,7 +78,7 @@ function myignite_render_settings_page() {
 
 	myignite_render_error_notice();
 
-	echo '<p class="myig-status">Events are imported automatically <strong>once a day at 6:00 PM Toronto time</strong>. ';
+	echo '<p class="myig-status">Events are imported automatically <strong>five times a day &mdash; at ' . esc_html( myignite_importer_schedule_label() ) . '</strong>. ';
 	if ( $next_cron ) {
 		echo 'Next run: <strong>' . esc_html( myignite_importer_toronto_format( $next_cron ) ) . '</strong>. ';
 	} else {
@@ -139,7 +139,7 @@ function myignite_render_settings_page() {
 	echo '<div class="myig-card"><h2>Run an import now</h2>';
 	echo '<p class="myig-help"><strong>How to use:</strong> pick the range of <em>event dates</em> you want '
 		. 'to import, then click <em>Run import now</em>. Leaving the defaults imports every upcoming event '
-		. 'from today onward &mdash; the same thing the daily 6:00 PM run does. All times are '
+		. 'from today onward &mdash; the same thing each scheduled run does. All times are '
 		. '<strong>Toronto time</strong>, and daylight saving is applied automatically, so there is nothing '
 		. 'to convert.</p>';
 
