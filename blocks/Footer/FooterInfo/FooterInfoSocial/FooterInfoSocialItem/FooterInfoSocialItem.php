@@ -54,6 +54,8 @@ if ( ! empty( $iconHtml ) && function_exists( 'theme_mark_svg_decorative' ) ) {
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SVG markup from trusted local files or theme_output_svg_or_img
 		echo $iconHtml;
 		?>
-		<span class="sr-only"><?php echo esc_html( $linkTitle ); ?></span>
+		<?php if ( empty( $linkLabel ) ) : ?>
+			<span class="sr-only"><?php echo esc_html( $linkTitle ); ?></span>
+		<?php endif; ?>
 	</a>
 </li>
