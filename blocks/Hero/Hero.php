@@ -11,6 +11,9 @@
  * @var array       $image
  * @var bool        $enableQuickNav
  * @var bool        $showBreadcrumbs
+ * @var bool        $showAppBadges
+ * @var string|null $appStoreUrl
+ * @var string|null $googlePlayUrl
  *
  * @var WP_Block $block    Block instance
  * @var string   $children InnerBlocks content
@@ -118,6 +121,25 @@ $heroHeadingTag = is_post_type_archive( 'tribe_events' ) ? 'h2' : 'h1';
 				]
 			);
 			?>
+
+			<?php if ( $isSecondary && ! empty( $showAppBadges ) ) : ?>
+				<div class="flex flex-wrap items-center gap-4 mt-6" data-animate="fade-up" data-animate-delay="1200">
+					<a href="<?php echo esc_url( $appStoreUrl ?? '' ); ?>" target="_blank" rel="noopener noreferrer">
+						<img
+							src="<?php echo esc_url( content_url( 'uploads/2026/06/Download_on_the_App_Store_Badge_US-UK_RGB_wht_092917.svg' ) ); ?>"
+							alt="<?php esc_attr_e( 'Download on the App Store', 'takt' ); ?>"
+							class="h-12 w-auto"
+						/>
+					</a>
+					<a href="<?php echo esc_url( $googlePlayUrl ?? '' ); ?>" target="_blank" rel="noopener noreferrer">
+						<img
+							src="<?php echo esc_url( content_url( 'uploads/2026/06/GetItOnGooglePlay_Badge_Web_color_English.svg' ) ); ?>"
+							alt="<?php esc_attr_e( 'Get it on Google Play', 'takt' ); ?>"
+							class="h-12 w-auto"
+						/>
+					</a>
+				</div>
+			<?php endif; ?>
 
 			<?php // Quick Navigation (Primary only) ?>
 			<?php if ( $isPrimary && ! empty( $enableQuickNav ) && ! empty( $children ) ) : ?>

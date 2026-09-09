@@ -4,6 +4,7 @@ import { useBlockProps, useInnerBlocksProps, InspectorControls } from "@wordpres
 import {
 	PanelBody,
 	ToggleControl,
+	TextControl,
 	Button,
 	__experimentalToggleGroupControl as ToggleGroupControl,
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption
@@ -43,7 +44,11 @@ const DEFAULT_IMAGE: ImageAttribute = { id: null, focalPoint: { x: 0.5, y: 0.5 }
 function normalizeImage(image: ResponsiveImageAttribute | ImageAttribute | undefined) {
 	const isLegacy = !!image && "id" in image && !("desktop" in image);
 	if (isLegacy) {
-		return { desktop: image as ImageAttribute, tablet: null as ImageAttribute | null, mobile: null as ImageAttribute | null };
+		return {
+			desktop: image as ImageAttribute,
+			tablet: null as ImageAttribute | null,
+			mobile: null as ImageAttribute | null
+		};
 	}
 	const responsive = (image || {}) as ResponsiveImageAttribute;
 	return {
@@ -77,6 +82,9 @@ type HeroAttributes = {
 	image: ResponsiveImageAttribute;
 	enableQuickNav: boolean;
 	showBreadcrumbs: boolean;
+	showAppBadges: boolean;
+	appStoreUrl: string;
+	googlePlayUrl: string;
 };
 
 type EditProps = {
@@ -156,11 +164,40 @@ export default function Edit({ attributes, setAttributes, clientId }: EditProps)
 					<PanelBody title={__("Settings", "takt")} initialOpen={true}>
 						<ToggleControl
 							label={__("Show Breadcrumbs", "takt")}
-							help={attributes.showBreadcrumbs ? __("Eyebrow is disabled when breadcrumbs are shown.", "takt") : ""}
+							help={
+								attributes.showBreadcrumbs
+									? __("Eyebrow is disabled when breadcrumbs are shown.", "takt")
+									: ""
+							}
 							checked={attributes.showBreadcrumbs}
 							onChange={(value) => setAttributes({ showBreadcrumbs: value })}
 							__nextHasNoMarginBottom
 						/>
+						<ToggleControl
+							label={__("Show App Store & Google Play Badges", "takt")}
+							help={__("Links to the MyIGNITE app listings.", "takt")}
+							checked={attributes.showAppBadges}
+							onChange={(value) => setAttributes({ showAppBadges: value })}
+							__nextHasNoMarginBottom
+						/>
+						{attributes.showAppBadges && (
+							<>
+								<TextControl
+									label={__("App Store URL", "takt")}
+									value={attributes.appStoreUrl}
+									onChange={(value) => setAttributes({ appStoreUrl: value })}
+									__nextHasNoMarginBottom
+									__next40pxDefaultSize
+								/>
+								<TextControl
+									label={__("Google Play URL", "takt")}
+									value={attributes.googlePlayUrl}
+									onChange={(value) => setAttributes({ googlePlayUrl: value })}
+									__nextHasNoMarginBottom
+									__next40pxDefaultSize
+								/>
+							</>
+						)}
 					</PanelBody>
 				)}
 
@@ -225,15 +262,15 @@ export default function Edit({ attributes, setAttributes, clientId }: EditProps)
 				<div className="col-start-1 row-start-1 self-end relative z-10 pt-[calc(var(--header-height)+180px)] md:pt-[calc(var(--header-height)+300px)] pb-8 sm:pb-16">
 					<div className="container">
 						{isSecondary && attributes.showBreadcrumbs && (
-								<FilteredServerSideRender
-									block="takt/hero"
-									attributes={attributes}
-									querySelector=".breadcrumbs"
-									className="breadcrumbs mb-4 uppercase text-sm font-medium leading-[1.1]"
-									preventInteraction
-								/>
-							)}
-							<ThemeHeading
+							<FilteredServerSideRender
+								block="takt/hero"
+								attributes={attributes}
+								querySelector=".breadcrumbs"
+								className="breadcrumbs mb-4 uppercase text-sm font-medium leading-[1.1]"
+								preventInteraction
+							/>
+						)}
+						<ThemeHeading
 							className={cn({
 								"max-w-[912px]": isPrimary,
 								"max-w-[700px]": isSecondary,
@@ -257,6 +294,29 @@ export default function Edit({ attributes, setAttributes, clientId }: EditProps)
 								setAttributes(value);
 							}}
 						/>
+
+						{isSecondary && attributes.showAppBadges && (
+							<div
+								className="flex flex-wrap items-center gap-4 mt-6"
+								data-animate="fade-up"
+								data-animate-delay="1200"
+							>
+								<a href={attributes.appStoreUrl} target="_blank" rel="noopener noreferrer">
+									<img
+										src="https://ignitestudentunion.ca/wp-content/uploads/2026/06/Download_on_the_App_Store_Badge_US-UK_RGB_wht_092917.svg"
+										alt={__("Download on the App Store", "takt")}
+										className="h-12 w-auto"
+									/>
+								</a>
+								<a href={attributes.googlePlayUrl} target="_blank" rel="noopener noreferrer">
+									<img
+										src="https://ignitestudentunion.ca/wp-content/uploads/2026/06/GetItOnGooglePlay_Badge_Web_color_English.svg"
+										alt={__("Get it on Google Play", "takt")}
+										className="h-12 w-auto"
+									/>
+								</a>
+							</div>
+						)}
 
 						{/* Quick Navigation (Primary only) */}
 						{isPrimary && (

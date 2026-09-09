@@ -74,6 +74,18 @@
     "showBreadcrumbs": {
       "type": "boolean",
       "default": false
+    },
+    "showAppBadges": {
+      "type": "boolean",
+      "default": false
+    },
+    "appStoreUrl": {
+      "type": "string",
+      "default": "https://apps.apple.com/us/app/my-ignite-student-portal/id6760649002"
+    },
+    "googlePlayUrl": {
+      "type": "string",
+      "default": "https://play.google.com/store/apps/details?id=com.novalsys.ignite"
     }
   },
   "textdomain": "takt",
