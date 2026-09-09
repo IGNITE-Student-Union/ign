@@ -121,20 +121,31 @@ function takt_assets_after_tec() {
 add_action( 'wp_enqueue_scripts', 'takt_assets_after_tec', 100 );
 
 /**
- * Preload the primary body font.
+ * Preload the primary body and heading fonts.
  *
  * General Sans is a single variable font (weight 200–700) covering the
- * regular-style text on every page. It's declared in screen/fonts.css, so
- * without a preload the browser only discovers it after screen.css has
- * downloaded and been parsed. Preloading lets the font fetch start in
- * parallel with the CSS instead of after it — purely additive, no existing
- * behaviour changes. The italic cut is used far less and is left unpreloaded.
+ * regular-style text on every page, and Anton (latin cut) covers every
+ * heading. Both are declared in screen/fonts.css, so without a preload the
+ * browser only discovers them after screen.css has downloaded and been
+ * parsed — on the homepage that chain measured over a second, and the
+ * font-display: swap fallback-to-Anton reflow was the largest single layout
+ * shift on the page. Preloading lets both fetches start in parallel with the
+ * CSS instead of after it — purely additive, no existing behaviour changes.
+ * The General Sans italic cut and Anton's vietnamese/latin-ext cuts are used
+ * far less and are left unpreloaded.
  */
 function takt_preload_fonts() {
-	printf(
-		'<link rel="preload" as="font" type="font/woff2" href="%s" crossorigin>' . "\n",
-		esc_url( get_theme_file_uri( 'public/fonts/GeneralSans-Variable.woff2' ) )
-	);
+	$fonts = [
+		'public/fonts/GeneralSans-Variable.woff2',
+		'public/fonts/Anton-Regular-latin.woff2',
+	];
+
+	foreach ( $fonts as $font ) {
+		printf(
+			'<link rel="preload" as="font" type="font/woff2" href="%s" crossorigin>' . "\n",
+			esc_url( get_theme_file_uri( $font ) )
+		);
+	}
 }
 add_action( 'wp_head', 'takt_preload_fonts', 1 );
 
