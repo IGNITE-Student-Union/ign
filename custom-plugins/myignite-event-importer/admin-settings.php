@@ -135,6 +135,27 @@ function myignite_render_settings_page() {
 	}
 	echo '</div>';
 
+	// ------------------------------------------------------- import criteria
+	echo '<div class="myig-card"><h2>Which events get imported</h2>';
+	echo '<p class="myig-help">An event is imported only when <strong>all</strong> of these are true on CampusGroups. '
+		. 'The ticked groups above are one of them.</p>';
+	echo '<table class="widefat striped"><thead><tr><th>Requirement</th><th>If not met</th></tr></thead><tbody>';
+	$criteria = array(
+		array( 'Hosted by a group ticked above', 'Not imported; left as-is if already on the website' ),
+		array( 'Tagged <strong>' . implode( '</strong> or <strong>', array_map( 'esc_html', MYIGNITE_REQUIRED_EVENT_TYPES ) ) . '</strong>', 'Not imported; left as-is if already on the website' ),
+		array( 'Publicly visible (<em>See Event on Calendar</em> = Everyone)', 'Not imported; left as-is if already on the website' ),
+		array( 'Approved', 'Not imported; <strong>trashed</strong> if already on the website' ),
+		array( 'Not a draft', 'Not imported; <strong>trashed</strong> if already on the website' ),
+		array( 'Not deleted', 'Not imported; <strong>trashed</strong> if already on the website' ),
+		array( 'Starts today or later (Toronto time)', 'Never touched &mdash; past events are left exactly as they are' ),
+	);
+	foreach ( $criteria as $row ) {
+		echo '<tr><td>' . wp_kses( $row[0], array( 'strong' => array(), 'em' => array() ) ) . '</td><td>' . wp_kses( $row[1], array( 'strong' => array() ) ) . '</td></tr>';
+	}
+	echo '</tbody></table>';
+	echo '<p class="myig-help" style="margin-top:12px;">Every skipped event and its reason is written to the sync log.</p>';
+	echo '</div>';
+
 	// ------------------------------------------------------------ manual run
 	echo '<div class="myig-card"><h2>Run an import now</h2>';
 	echo '<p class="myig-help"><strong>How to use:</strong> pick the range of <em>event dates</em> you want '

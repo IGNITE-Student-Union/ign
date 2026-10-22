@@ -36,6 +36,12 @@ define( 'MYIGNITE_ALLOWED_GROUPS', array(
 	35442 => 'IGNITE Governance',
 ) );
 
+// An event is only imported if it carries at least one of these tags - the
+// same `eventTopics` field that is already imported onto the website as post
+// tags. Matched case-insensitively, whitespace-trimmed. See
+// myignite_importer_event_filtered_out().
+define( 'MYIGNITE_REQUIRED_EVENT_TYPES', array( 'IGNITE Event', 'Important Date' ) );
+
 // Base host for CampusGroups' Data API (see myignite_importer_data_api_fetch_events()
 // below) - the same host every rsvp/event link on the site already points at.
 define( 'MYIGNITE_CG_HOST', 'https://my.ignitestudentunion.ca' );
@@ -425,6 +431,26 @@ function myignite_importer_event_removed_at_source( $event ) {
 }
 
 /**
+ * Does the event carry one of MYIGNITE_REQUIRED_EVENT_TYPES as a tag?
+ *
+ * Reads eventTopics, split on commas exactly as
+ * myignite_importer_build_event_fields() does when it creates the post tags,
+ * so "has the tag here" means "gets that tag on the website".
+ *
+ * Fails CLOSED: no tags, or a missing eventTopics, does not qualify, because
+ * the requirement is that the event positively carries one of these tags.
+ */
+function myignite_importer_event_has_required_type( $event ) {
+	$required = array_map( 'strtolower', array_map( 'trim', MYIGNITE_REQUIRED_EVENT_TYPES ) );
+	foreach ( explode( ',', (string) ( $event['eventTopics'] ?? '' ) ) as $type ) {
+		if ( in_array( strtolower( trim( $type ) ), $required, true ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
  * Do we choose to publish this event?
  *
  * Failing these means "do not import, and stop updating" - it does NOT mean
@@ -441,6 +467,12 @@ function myignite_importer_event_filtered_out( $event ) {
 	// until an admin has saved the settings page for the first time.
 	if ( ! array_key_exists( $group_id, myignite_importer_enabled_groups() ) ) {
 		return 'its group is not ticked in the importer settings';
+	}
+
+	// Must carry one of the required tags (IGNITE Event / Important Date).
+	if ( ! myignite_importer_event_has_required_type( $event ) ) {
+		$topics = trim( (string) ( $event['eventTopics'] ?? '' ) );
+		return 'tags "' . ( '' !== $topics ? $topics : '(none)' ) . '" do not include any of: ' . implode( ', ', MYIGNITE_REQUIRED_EVENT_TYPES );
 	}
 
 	// Only publish events CampusGroups itself shows publicly. publishCalendar
